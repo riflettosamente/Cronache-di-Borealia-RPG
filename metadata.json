@@ -1,6 +1,6 @@
 {
-  "name": "",
-  "description": "",
+  "name": "RPG Sopravvivenza Alfa 0.15",
+  "description": "Gioco di ruolo e sopravvivenza con esplorazione di regioni, raccolta risorse, crafting e combattimenti a turni.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
