@@ -398,7 +398,7 @@ export default function Game() {
             <div className="vignette pointer-events-none absolute inset-0" />
 
             {/* LAYER 3 — ispettore regioni (verifica sagome) */}
-            {inspect && <RegionInspector current={regionId} />}
+            {inspect && <RegionInspector current={regionId} onClose={() => setInspect(false)} />}
 
             {/* legenda zone */}
             {showZones && !overlayOpen && (
