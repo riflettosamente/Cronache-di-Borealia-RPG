@@ -357,14 +357,22 @@ export function BestiaryPanel() {
 
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-xs text-[var(--color-muted)] italic">
-        36 creature avvistate nelle terre di Borealia.
-      </p>
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-[var(--color-muted)] italic">
+          36 creature native delle terre di Borealia con punteggi originali.
+        </p>
+        {m && (
+          <span className="font-num text-xs text-[var(--color-gold)] font-bold">
+            #{String(m.frame + 1).padStart(2, "0")} / 36
+          </span>
+        )}
+      </div>
 
-      {/* Riquadro Dettaglio Mostro */}
+      {/* Riquadro Dettaglio Mostro con Carta e Punteggi */}
       {m && (
-        <div className="panel-inset p-3.5 flex flex-col items-center gap-3">
-          <div className="w-48 aspect-[400/569] overflow-hidden rounded border border-[var(--color-border)] shadow-lg bg-black/60 flex items-center justify-center">
+        <div className="panel-inset p-3.5 flex flex-col md:flex-row items-center justify-center gap-4 bg-black/60">
+          {/* Carta Mostro con Statistiche Sovrapposte */}
+          <div className="relative w-52 aspect-[400/569] overflow-hidden rounded-lg border border-[var(--color-border)] shadow-2xl bg-black/90 shrink-0">
             <img
               src={asset(m.img)}
               alt={m.name}
@@ -373,50 +381,170 @@ export function BestiaryPanel() {
                 (e.currentTarget as HTMLElement).style.display = "none";
               }}
             />
-          </div>
-          <div className="text-center">
-            <h3 className="font-display text-base text-[var(--color-gold)]">{m.name}</h3>
-            <span
-              className={`text-xs font-semibold uppercase tracking-wider ${
-                m.baseTier === "comune"
-                  ? "rar-comune"
-                  : m.baseTier === "noncomune"
-                  ? "rar-noncomune"
-                  : m.baseTier === "raro"
-                  ? "rar-raro"
-                  : "rar-mitico"
-              }`}
+
+            {/* Punti Vita sovrapposti nel Cuore in Alto a Destra */}
+            <div
+              className="absolute pointer-events-none transform -translate-x-1/2 -translate-y-1/2 flex items-center justify-center"
+              style={{ left: "85.5%", top: "10.5%" }}
             >
-              Grado: {m.baseTier || "Sconosciuto"}
-            </span>
+              <span className="font-num font-extrabold text-[13px] text-white drop-shadow-[0_2px_4px_rgba(0,0,0,1)]">
+                {m.pv}
+              </span>
+            </div>
+
+            {/* 5 Riquadri Statistiche in Basso sulla Carta (ATT, PAR, IMP, PRO, XP) */}
+            <div
+              className="absolute pointer-events-none transform -translate-x-1/2 -translate-y-1/2 font-num font-bold text-[11px] text-[#222] flex items-center justify-center"
+              style={{ left: "19%", top: "91.2%" }}
+              title="Attacco (PATT)"
+            >
+              {m.att}
+            </div>
+            <div
+              className="absolute pointer-events-none transform -translate-x-1/2 -translate-y-1/2 font-num font-bold text-[11px] text-[#222] flex items-center justify-center"
+              style={{ left: "34.5%", top: "91.2%" }}
+              title="Parata (PPAR)"
+            >
+              {m.par}
+            </div>
+            <div
+              className="absolute pointer-events-none transform -translate-x-1/2 -translate-y-1/2 font-num font-bold text-[10px] text-[#222] flex items-center justify-center"
+              style={{ left: "50.2%", top: "91.2%" }}
+              title="Impatto (PImp)"
+            >
+              {m.imp}
+            </div>
+            <div
+              className="absolute pointer-events-none transform -translate-x-1/2 -translate-y-1/2 font-num font-bold text-[11px] text-[#222] flex items-center justify-center"
+              style={{ left: "66%", top: "91.2%" }}
+              title="Protezione (PPro)"
+            >
+              {m.pro}
+            </div>
+            <div
+              className="absolute pointer-events-none transform -translate-x-1/2 -translate-y-1/2 font-num font-bold text-[10px] text-[#222] flex items-center justify-center"
+              style={{ left: "81.5%", top: "91.2%" }}
+              title="Punti Esperienza (XP)"
+            >
+              {m.xp}
+            </div>
+          </div>
+
+          {/* Scheda Statistiche Dettagliate */}
+          <div className="flex flex-col gap-2.5 flex-1 min-w-[200px] w-full">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-num text-xs px-1.5 py-0.5 rounded bg-[var(--color-gold)]/20 text-[var(--color-gold)] font-bold">
+                  #{String(m.frame + 1).padStart(2, "0")}
+                </span>
+                <h3 className="font-display text-lg text-[var(--color-gold)]">
+                  {m.name}
+                </h3>
+              </div>
+              <span
+                className={`text-xs font-semibold uppercase tracking-wider block mt-0.5 ${
+                  m.baseTier === "comune"
+                    ? "rar-comune"
+                    : m.baseTier === "noncomune"
+                    ? "rar-noncomune"
+                    : m.baseTier === "raro"
+                    ? "rar-raro"
+                    : "rar-mitico"
+                }`}
+              >
+                Grado: {m.baseTier || "Comune"}
+              </span>
+            </div>
+
+            {/* Tabella Punteggi */}
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="p-2 rounded bg-black/40 border border-[var(--color-border)]">
+                <span className="stat-key text-[var(--color-muted)] flex items-center gap-1">
+                  ❤️ Punti Vita (PV):
+                </span>
+                <div className="font-num text-base font-bold text-red-400 mt-0.5">
+                  {m.pv}
+                </div>
+              </div>
+
+              <div className="p-2 rounded bg-black/40 border border-[var(--color-border)]">
+                <span className="stat-key text-[var(--color-muted)] flex items-center gap-1">
+                  ⚔️ Attacco (PATT):
+                </span>
+                <div className="font-num text-base font-bold text-[var(--color-gold-soft)] mt-0.5">
+                  {m.att}
+                </div>
+              </div>
+
+              <div className="p-2 rounded bg-black/40 border border-[var(--color-border)]">
+                <span className="stat-key text-[var(--color-muted)] flex items-center gap-1">
+                  🛡️ Parata (PPAR):
+                </span>
+                <div className="font-num text-base font-bold text-blue-300 mt-0.5">
+                  {m.par}
+                </div>
+              </div>
+
+              <div className="p-2 rounded bg-black/40 border border-[var(--color-border)]">
+                <span className="stat-key text-[var(--color-muted)] flex items-center gap-1">
+                  💥 Impatto (PImp):
+                </span>
+                <div className="font-num text-base font-bold text-amber-300 mt-0.5">
+                  {m.imp}
+                </div>
+              </div>
+
+              <div className="p-2 rounded bg-black/40 border border-[var(--color-border)]">
+                <span className="stat-key text-[var(--color-muted)] flex items-center gap-1">
+                  🪖 Protezione (PPro):
+                </span>
+                <div className="font-num text-base font-bold text-emerald-300 mt-0.5">
+                  {m.pro}
+                </div>
+              </div>
+
+              <div className="p-2 rounded bg-black/40 border border-[var(--color-border)]">
+                <span className="stat-key text-[var(--color-muted)] flex items-center gap-1">
+                  💰 Ricompensa XP:
+                </span>
+                <div className="font-num text-base font-bold text-[var(--color-gold)] mt-0.5">
+                  +{m.xp} XP
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}
 
-      {/* Griglia Selezione Creature */}
-      <div className="grid grid-cols-4 gap-1.5">
-        {MONSTERS.map((monster) => {
-          const isSel = selected === monster.frame;
-          return (
-            <button
-              key={monster.frame}
-              onClick={() => setSelected(monster.frame)}
-              className={`p-1.5 rounded border text-center transition-all ${
-                isSel
-                  ? "border-[var(--color-gold)] bg-[var(--color-gold)]/15"
-                  : "border-[var(--color-border)] bg-black/30 hover:border-[var(--color-gold)]/50"
-              }`}
-              title={monster.name}
-            >
-              <div className="font-num text-[10px] text-[var(--color-muted)]">
-                #{String(monster.frame + 1).padStart(2, "0")}
-              </div>
-              <div className="text-[11px] truncate text-[var(--color-ink)] mt-0.5">
-                {monster.name}
-              </div>
-            </button>
-          );
-        })}
+      {/* Griglia Selezione Creature (36 mostri in ordine) */}
+      <div className="flex flex-col gap-1">
+        <span className="text-[11px] font-display text-[var(--color-gold-soft)]">
+          Seleziona Creatura:
+        </span>
+        <div className="grid grid-cols-4 sm:grid-cols-6 gap-1 max-h-56 overflow-y-auto log-scroll p-1 border border-[var(--color-border)] rounded bg-black/30">
+          {MONSTERS.map((monster) => {
+            const isSel = selected === monster.frame;
+            return (
+              <button
+                key={monster.frame}
+                onClick={() => setSelected(monster.frame)}
+                className={`p-1.5 rounded border text-left transition-all ${
+                  isSel
+                    ? "border-[var(--color-gold)] bg-[var(--color-gold)]/20 shadow"
+                    : "border-[var(--color-border)]/60 bg-black/40 hover:border-[var(--color-gold)]/60 hover:bg-white/5"
+                }`}
+                title={`${monster.name} (${monster.baseTier})`}
+              >
+                <div className="font-num text-[9px] text-[var(--color-muted)]">
+                  #{String(monster.frame + 1).padStart(2, "0")}
+                </div>
+                <div className="text-[11px] font-medium truncate text-[var(--color-ink)] mt-0.5">
+                  {monster.name}
+                </div>
+              </button>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

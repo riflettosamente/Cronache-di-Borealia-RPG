@@ -3,7 +3,19 @@ import raw from "@/game/data/game-data.json";
 
 // ---------- Tipi dati recuperati ----------
 export interface RegionData { id: number; key: string; name: string; biome: string; bg: string; poly: [number, number][]; centroid: [number, number]; }
-export interface MonsterData { frame: number; name: string; img: string; points: Record<string, [number, number]>; baseTier: string | null; }
+export interface MonsterData {
+  frame: number;
+  name: string;
+  img: string;
+  points: Record<string, [number, number]>;
+  baseTier: string | null;
+  pv: number;
+  att: number;
+  par: number;
+  imp: string;
+  pro: number;
+  xp: number;
+}
 export interface TierStat { pv: number; att: number; par: number; imp: string; pro: number; xp: number; }
 export interface GatherData { id: string; sprite: string; categoria: string; professione: string; loot: [string, number][]; azione: string; }
 export interface ItemData { id: string; name: string; icon: string; }
@@ -83,7 +95,13 @@ export interface Enemy {
   pv: number; pvmax: number; att: number; par: number; imp: string; pro: number; xpReward: number;
 }
 
-export const PROFESSIONI = ["Botanico", "Cacciatore", "Pescatore", "Geologo", "Minatore", "Boscaiolo"] as const;
+export const PROFESSIONI = [
+  "Erboristeria",
+  "Taglialegna",
+  "Caccia",
+  "Pesca",
+  "Estrazione",
+] as const;
 
 export function initPG(): PG {
   const s = DATA.statsPG;
@@ -109,13 +127,18 @@ export function spawnEnemy(biome: string): Enemy {
   if (!pool || pool.length === 0) { tier = "comune"; pool = pools.comune; }
   const frame = choice(pool);
   const m = MONSTERS[frame];
-  const effTier = m.baseTier ?? tier; // creature piccole hanno stats dedicate
-  const ts = DATA.tierStats[effTier];
-  const jitter = Math.max(1, Math.round(ts.pv * (0.85 + Math.random() * 0.3)));
+  const effTier = m.baseTier ?? tier;
+  const ts = DATA.tierStats[effTier] ?? DATA.tierStats.comune;
+  const basePv = m.pv ?? ts.pv;
+  const jitter = Math.max(1, Math.round(basePv * (0.85 + Math.random() * 0.3)));
   return {
-    frame, name: m.name, img: m.img, tier,
+    frame, name: m.name, img: m.img, tier: effTier,
     pv: jitter, pvmax: jitter,
-    att: ts.att, par: ts.par, imp: ts.imp, pro: ts.pro, xpReward: ts.xp,
+    att: m.att ?? ts.att,
+    par: m.par ?? ts.par,
+    imp: m.imp ?? ts.imp,
+    pro: m.pro ?? ts.pro,
+    xpReward: m.xp ?? ts.xp,
   };
 }
 
@@ -139,8 +162,9 @@ export function rollSpawns(biome: string): Spawn[] {
 export function professionLevelFor(xp: number): number { return 1 + Math.floor(xp / 5); }
 
 /** Linee loot di una raccolta; a livello professione alto chance di raddoppio */
-export function gatherLoot(g: GatherData, prof: Professione): [string, number][] {
-  const mult = Math.random() < Math.min(0.45, (prof.livello - 1) * 0.08) ? 2 : 1;
+export function gatherLoot(g: GatherData, prof?: Professione): [string, number][] {
+  const level = prof ? prof.livello : 1;
+  const mult = Math.random() < Math.min(0.45, (level - 1) * 0.08) ? 2 : 1;
   return g.loot.map(([n, q]) => [n, q * mult] as [string, number]);
 }
 

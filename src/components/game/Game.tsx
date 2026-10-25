@@ -13,10 +13,14 @@ import {
   CharacterPanel, BagPanel, DiaryPanel, AtlasPanel, BestiaryPanel,
   PANEL_LABEL, PANEL_KEY, type PanelId, type LogEntry,
 } from "./Panels";
-import { Maximize, Minimize } from "lucide-react";
+import { Compass, Maximize, Minimize } from "lucide-react";
+
+export const GAME_TITLE = "Cronache di Borealia";
+export const GAME_VERSION = "alfa 0.20";
+export const GAME_SUBTITLE = "Terre Inesplorate";
 
 type View = "menu" | "map" | "region" | "combat" | "dead";
-const SAVE = "rpg-alfa-015";
+const SAVE = "rpg-alfa-020";
 let logId = 1;
 
 interface Save {
@@ -64,12 +68,14 @@ export default function Game() {
   const [showZones, setShowZones] = useState(false);
   const [zoneLayer, setZoneLayer] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [missingProfPopup, setMissingProfPopup] = useState<string | null>(null);
 
   const isPaused = inspect || showZones;
 
   const areaRef = useRef<HTMLDivElement>(null);
   const [stage, setStage] = useState({ w: 0, h: 0 });
-  const walkTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const walkTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [stepDuration, setStepDuration] = useState(900);
 
   const addLog = useCallback((text: string, kind: LogEntry["kind"] = "info") => {
     setLog((l) => [{ id: logId++, text, kind }, ...l].slice(0, 80));
@@ -118,7 +124,29 @@ export default function Game() {
     if (view === "menu" || view === "dead") return;
     try { localStorage.setItem(SAVE, JSON.stringify({ pg, professions, inventory, avatar, regionId, turno } as Save)); setHasSave(true); } catch { }
   }, [pg, professions, inventory, avatar, regionId, turno, view]);
-  useEffect(() => () => { if (walkTimer.current) clearInterval(walkTimer.current); }, []);
+  useEffect(() => () => { if (walkTimer.current) clearTimeout(walkTimer.current); }, []);
+
+  const toggleInspect = () => {
+    setInspect((prev) => {
+      const next = !prev;
+      if (next) {
+        setShowZones(false);
+        if (walkTimer.current) { clearTimeout(walkTimer.current); setMoving(false); setTarget(null); }
+      }
+      return next;
+    });
+  };
+
+  const toggleZones = () => {
+    setShowZones((prev) => {
+      const next = !prev;
+      if (next) {
+        setInspect(false);
+        if (walkTimer.current) { clearTimeout(walkTimer.current); setMoving(false); setTarget(null); }
+      }
+      return next;
+    });
+  };
 
   /* ---- scorciatoie da tastiera ---- */
   useEffect(() => {
@@ -126,8 +154,8 @@ export default function Game() {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") { setInspect(false); setShowZones(false); setPanel(null); return; }
       const k = e.key.toUpperCase();
-      if (k === "R") { setInspect((v) => !v); return; }
-      if (k === "Z") { setShowZones((v) => !v); return; }
+      if (k === "R") { toggleInspect(); return; }
+      if (k === "Z") { toggleZones(); return; }
       const hit = (Object.keys(PANEL_KEY) as PanelId[]).find((p) => PANEL_KEY[p] === k);
       if (hit) setPanel((cur) => (cur === hit ? null : hit));
     };
@@ -145,7 +173,15 @@ export default function Game() {
     } else {
       try {
         const s: Save = JSON.parse(localStorage.getItem(SAVE) || "{}");
-        if (s.pg) { setPg(s.pg); setProfessions(s.professions); setInventory(s.inventory); setAvatar(s.avatar); setRegionId(s.regionId); setTurno(s.turno ?? 0); }
+        if (s.pg) {
+          setPg(s.pg);
+          const baseProfs = initProfessioni();
+          setProfessions({ ...baseProfs, ...(s.professions || {}) });
+          setInventory(s.inventory);
+          setAvatar(s.avatar);
+          setRegionId(s.regionId);
+          setTurno(s.turno ?? 0);
+        }
         addLog("Riprendi il viaggio da dove lo avevi lasciato.", "info");
       } catch { }
     }
@@ -161,44 +197,75 @@ export default function Game() {
     };
   };
 
-  /* ---- spostamento con pathfinding (gestione imbarcazione per mare aperto) ---- */
+  /* ---- spostamento con pathfinding (gestione imbarcazione per mare aperto e re-routing in tempo reale) ---- */
   const travel = (dest: { x: number; y: number }) => {
-    if (moving || inspect || showZones) return;
+    if (inspect || showZones) return;
+    if (walkTimer.current) clearTimeout(walkTimer.current);
+
     const boat = hasBoat(inventory);
     const wasWalkable = isWalkable(dest.x, dest.y, boat);
     const path = findPath(avatar, dest, boat);
     if (!path || path.length === 0) {
       addLog("Nessun cammino raggiungibile in quella direzione.", "warn");
+      setMoving(false);
+      setTarget(null);
       return;
     }
-    setTarget(dest);
+    const finalDest = path[path.length - 1];
+    setTarget(finalDest);
     setMoving(true);
-    let i = 0;
-    walkTimer.current = setInterval(() => {
-      const step = path[i++];
-      if (step) setAvatar(step);
-      if (i >= path.length) {
-        if (walkTimer.current) clearInterval(walkTimer.current);
+    let hasLoggedWade = false;
+
+    const executeStep = (idx: number) => {
+      if (idx >= path.length) {
         setMoving(false);
         setTarget(null);
+        setStepDuration(900);
         setTurno((t) => t + 1);
-        const rid = regionAt(dest.x, dest.y);
+        const rid = regionAt(finalDest.x, finalDest.y);
         setRegionId(rid);
         if (rid !== null) {
-          setSpawns([]); setExplored(false);
-          addLog(`Giungi a ${REGIONS[rid].name} (${REGIONS[rid].biome}).`, "good");
-          setView("region");
+          setSpawns([]);
+          setExplored(false);
+          addLog(`Giungi a ${REGIONS[rid].name} (${REGIONS[rid].biome}). Clicca sul tuo personaggio per esplorare la zona.`, "good");
         } else {
           if (!wasWalkable && !boat) {
-            addLog("Non puoi entrare in mare aperto senza una imbarcazione (zattera, barca, piroga, ecc.). Ti fermi al confine.", "warn");
+            addLog("Raggiungi il limite della costa in acqua bassa. Non puoi avventurarti in mare aperto senza una imbarcazione (zattera, barca, piroga, ecc.).", "warn");
           } else if (!wasWalkable) {
             addLog("Navighi in mare aperto con la tua imbarcazione.", "info");
           } else {
-            addLog(`Ti sposti verso ${terrainAt(dest.x, dest.y).toLowerCase()}.`, "info");
+            addLog(`Ti sposti verso ${terrainAt(finalDest.x, finalDest.y).toLowerCase()}.`, "info");
           }
         }
+        return;
       }
-    }, 110);
+
+      const step = path[idx];
+      setAvatar(step);
+
+      // Ritmo del passo a piedi: cammino normale ~900ms, acqua bassa (Mare) o guado (Fiume) senza barca ~1800ms
+      const currentTerrain = terrainAt(step.x, step.y);
+      const isWater = currentTerrain === "Fiume o Lago" || currentTerrain === "Mare";
+      const isWading = isWater && !boat;
+
+      if (isWading && !hasLoggedWade) {
+        hasLoggedWade = true;
+        if (currentTerrain === "Mare") {
+          addLog("Cammini nell'acqua bassa lungo la costa tra secche e pozze di marea.", "info");
+        } else {
+          addLog("Guadi a piedi il corso d'acqua: l'andatura si fa lenta e faticosa.", "info");
+        }
+      }
+
+      const duration = isWading ? 1800 : 900;
+      setStepDuration(duration);
+
+      walkTimer.current = setTimeout(() => {
+        executeStep(idx + 1);
+      }, duration);
+    };
+
+    executeStep(0);
   };
 
   const goToRegion = (id: number) => {
@@ -221,7 +288,16 @@ export default function Game() {
     const sp = spawns.find((s) => s.key === key);
     const g = sp && GATHERABLES.find((x) => x.id === sp.gid);
     if (!sp || !g) return;
-    const prof = professions[g.professione];
+
+    const profName = g.professione;
+    const prof = professions[profName];
+
+    if (!prof) {
+      setMissingProfPopup(profName || "Sconosciuta");
+      addLog(`Attenzione: professione mancante per ${g.id} (${profName || "non configurata"}).`, "warn");
+      return;
+    }
+
     const loot = gatherLoot(g, prof);
     setInventory((inv) => {
       const n = { ...inv };
@@ -230,8 +306,8 @@ export default function Game() {
     });
     addLog(`${g.azione} ${g.id}: ${loot.map(([n, q]) => `${n} +${q}`).join(", ")}.`, "loot");
     const nx = prof.xp + 1, nl = professionLevelFor(nx);
-    if (nl > prof.livello) addLog(`${g.professione} sale al livello ${nl}!`, "good");
-    setProfessions((p) => ({ ...p, [g.professione]: { xp: nx, livello: nl } }));
+    if (nl > prof.livello) addLog(`${profName} sale al livello ${nl}!`, "good");
+    setProfessions((p) => ({ ...p, [profName]: { xp: nx, livello: nl } }));
     setSpawns((s) => s.filter((x) => x.key !== key));
   };
 
@@ -286,20 +362,21 @@ export default function Game() {
   if (view === "menu") {
     return (
       <main className="relative flex min-h-screen items-center justify-center bg-cover bg-center" style={{ backgroundImage: `url(${asset("sprites/map.jpg")})` }}>
-        <div className="absolute inset-0 bg-[var(--color-bg)]/80" />
-        <div className="relative flex flex-col items-center gap-3 px-6">
-          <img src={asset("sprites/loading-logo.webp")} alt="" className="mb-1 max-h-24 object-contain drop-shadow-[0_6px_18px_rgba(0,0,0,.8)]" />
-          <h1 className="font-display text-center text-5xl md:text-6xl tracking-wide text-[var(--color-gold)] drop-shadow">RPG Sopravvivenza</h1>
-          <p className="mb-5 italic text-[var(--color-muted)]">alfa 0.15 — ricostruzione dai dati recuperati</p>
-          {hasSave && <button onClick={() => start(false)} className="btn btn-menu btn-gold">Continua</button>}
-          <button onClick={() => start(true)} className="btn btn-menu">Nuova partita</button>
-          <p className="mt-6 max-w-md text-center text-sm italic text-[var(--color-muted)]">
-            23 regioni · 7 biomi · 36 mostri · 6 professioni — mappa, tabelle e creature originali.
+        <div className="absolute inset-0 bg-[var(--color-bg)]/85 backdrop-blur-[2px]" />
+        <div className="relative flex flex-col items-center gap-3 px-6 max-w-xl text-center">
+          <h1 className="font-display text-center text-5xl md:text-6xl tracking-wide text-[var(--color-gold)] drop-shadow-[0_4px_16px_rgba(0,0,0,0.9)]">
+            {GAME_TITLE}
+          </h1>
+          <p className="mb-6 font-display text-sm tracking-widest uppercase text-[var(--color-gold-soft)]/90">
+            {GAME_VERSION} — {GAME_SUBTITLE}
           </p>
-          <a href="/rpg-alfa-0.15-complete-project.zip" download
-            className="mt-2 text-xs italic text-[var(--color-muted)] underline decoration-dotted underline-offset-4 hover:text-[var(--color-gold-soft)]">
-            Scarica il progetto completo con asset originali (ZIP)
-          </a>
+          <div className="flex flex-col gap-2.5 w-full max-w-xs items-center">
+            {hasSave && <button onClick={() => start(false)} className="btn btn-menu btn-gold w-full py-2.5 text-base shadow-lg">Continua</button>}
+            <button onClick={() => start(true)} className="btn btn-menu w-full py-2.5 text-base shadow-lg">Nuova partita</button>
+          </div>
+          <p className="mt-8 text-center text-base md:text-lg italic text-[var(--color-muted)] leading-relaxed border-t border-[var(--color-border)]/50 pt-5 max-w-lg">
+            «Nessuna mappa conosce ancora la tua storia. Addentrati nelle terre selvagge e scrivi le tue Cronache.»
+          </p>
         </div>
       </main>
     );
@@ -320,13 +397,17 @@ export default function Game() {
   const hoverRegion = hoverId !== null ? REGIONS[hoverId] : null;
   const info = cursor ?? avatar;
   const overlayOpen = view === "region" || view === "combat";
+  const distRef = moving && target ? target : cursor;
+  const distKm = distRef
+    ? Math.round((Math.hypot(distRef.x - avatar.x, distRef.y - avatar.y) / 32) * 10)
+    : null;
 
   return (
     <div className="flex h-screen flex-col overflow-hidden">
       {/* ---------- barra comandi ---------- */}
       <header className="flex shrink-0 items-center gap-5 border-b border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2">
         <h1 className="font-display text-lg tracking-wide text-[var(--color-gold)]">
-          RPG Sopravvivenza <span className="ml-1 font-body text-xs italic text-[var(--color-muted)]">alfa 0.15</span>
+          {GAME_TITLE} <span className="ml-1 font-body text-xs italic text-[var(--color-muted)]">{GAME_VERSION} — {GAME_SUBTITLE}</span>
         </h1>
         <nav className="flex items-center gap-1.5">
           {(Object.keys(PANEL_LABEL) as PanelId[]).map((p) => (
@@ -336,11 +417,11 @@ export default function Game() {
             </button>
           ))}
           <span className="mx-1 h-5 w-px bg-[var(--color-border)]" />
-          <button onClick={() => setInspect((v) => !v)}
+          <button onClick={toggleInspect}
             className={`btn btn-sm ${inspect ? "btn-gold" : ""}`} title="Verifica regioni (tasto R)">
             Regioni
           </button>
-          <button onClick={() => setShowZones((v) => !v)}
+          <button onClick={toggleZones}
             className={`btn btn-sm ${showZones ? "btn-gold" : ""}`} title="Layer zone di terreno (tasto Z)">
             Zone
           </button>
@@ -368,18 +449,17 @@ export default function Game() {
             style={{ width: stage.w || "100%", height: stage.h || "100%" }}
             onMouseMove={(e) => { if (overlayOpen || inspect) return; const p = toMap(e); setCursor(p); setHoverId(regionAt(p.x, p.y)); }}
             onMouseLeave={() => { if (inspect) return; setCursor(null); setHoverId(null); }}
-            onClick={(e) => { if (overlayOpen || moving || isPaused) return; travel(toMap(e)); }}
+            onClick={(e) => { if (overlayOpen || isPaused) return; travel(toMap(e)); }}
           >
             {/* LAYER 0 — mappa del mondo (sfondo-sheet0.png originale) */}
             <img src={asset("sprites/map.jpg")} alt="Mappa del mondo" draggable={false} className="absolute inset-0 h-full w-full" />
 
             {/* LAYER 1 — sagome reali delle 23 regioni (alpha di regioneN-sheet0.png) */}
             {cutouts.map((c) => {
-              const on = hoverId === c.id && !overlayOpen;
               const cur = regionId === c.id;
               return (
                 <img key={c.id} src={asset(c.file)} alt="" draggable={false}
-                  className={`cutout ${on ? "cutout-hover" : cur ? "cutout-active" : ""}`}
+                  className={`cutout ${cur ? "cutout-active" : ""}`}
                   style={{ left: `${(c.x / MAP_W) * 100}%`, top: `${(c.y / MAP_H) * 100}%`, width: `${(c.w / MAP_W) * 100}%`, height: `${(c.h / MAP_H) * 100}%` }} />
               );
             })}
@@ -391,9 +471,33 @@ export default function Game() {
 
             {/* pin destinazione + avatar */}
             {target && <span className="map-pin" style={{ left: `${(target.x / MAP_W) * 100}%`, top: `${(target.y / MAP_H) * 100}%` }} />}
-            <img src={asset("sprites/avatarpg.webp")} alt="Il tuo personaggio" draggable={false}
-              className={`map-avatar pointer-events-none absolute w-[2.6%] ${moving ? "map-avatar-walk" : ""}`}
-              style={{ left: `${(avatar.x / MAP_W) * 100}%`, top: `${(avatar.y / MAP_H) * 100}%`, transform: "translate(-50%,-50%)", transitionDuration: moving ? "110ms" : "700ms" }} />
+            <div
+              className={`map-avatar absolute w-[2.8%] z-10 select-none ${moving ? "map-avatar-walk pointer-events-none" : "pointer-events-auto cursor-pointer"}`}
+              style={{
+                left: `${(avatar.x / MAP_W) * 100}%`,
+                top: `${(avatar.y / MAP_H) * 100}%`,
+                transform: "translate(-50%,-50%)",
+                transitionDuration: moving ? `${stepDuration}ms` : "600ms",
+                transitionTimingFunction: "linear",
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (moving || overlayOpen || isPaused) return;
+                if (regionId !== null) {
+                  setView("region");
+                } else {
+                  addLog("Ti trovi in mare aperto o fuori dai confini di una regione.", "info");
+                }
+              }}
+              title={regionId !== null ? `Clicca per esplorare ${REGIONS[regionId].name}` : "Il tuo personaggio"}
+            >
+              <img
+                src={asset("sprites/avatarpg.webp")}
+                alt="Il tuo personaggio"
+                draggable={false}
+                className="w-full h-full object-contain filter drop-shadow-[0_4px_8px_rgba(0,0,0,0.85)]"
+              />
+            </div>
 
             <div className="vignette pointer-events-none absolute inset-0" />
 
@@ -412,14 +516,6 @@ export default function Game() {
               </div>
             )}
 
-            {/* etichetta regione sotto il cursore */}
-            {hoverRegion && !overlayOpen && !inspect && !showZones && (
-              <div className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full"
-                style={{ left: `${(hoverRegion.centroid[0] / MAP_W) * 100}%`, top: `${(hoverRegion.centroid[1] / MAP_H) * 100}%` }}>
-                <span className="panel px-2.5 py-1 font-display text-sm text-[var(--color-gold-soft)]">{hoverRegion.name}</span>
-              </div>
-            )}
-
             {/* etichetta bioma sotto il cursore quando zone è attivo */}
             {showZones && cursor && !overlayOpen && !inspect && (
               <div className="pointer-events-none absolute z-20 -translate-x-1/2 translate-y-3"
@@ -427,6 +523,39 @@ export default function Game() {
                 <span className="panel px-2.5 py-1 font-display text-xs text-[var(--color-gold-soft)] shadow-xl bg-black/90 border border-[var(--color-gold)]/60">
                   {terrainAt(cursor.x, cursor.y)}
                 </span>
+              </div>
+            )}
+
+            {/* badge elegante scala cartografica e distanza (in basso a destra) */}
+            {!overlayOpen && !inspect && (
+              <div className="panel pointer-events-none absolute bottom-3 right-3 z-10 p-2.5 bg-black/85 backdrop-blur-sm border border-[var(--color-gold)]/60 shadow-2xl min-w-[155px]">
+                <div className="flex items-center justify-between gap-2 border-b border-[var(--color-border)] pb-1 mb-1.5">
+                  <div className="flex items-center gap-1.5 text-[var(--color-gold)]">
+                    <Compass className="w-3.5 h-3.5 text-[var(--color-gold)] shrink-0" />
+                    <span className="font-display text-[11px] uppercase tracking-wider">
+                      {moving ? "In Cammino" : "Distanza"}
+                    </span>
+                  </div>
+                  <span className="font-num text-xs text-[var(--color-gold-soft)] font-bold">
+                    {distKm !== null ? `${distKm} km` : "—"}
+                  </span>
+                </div>
+
+                {/* mini-scala cartografica */}
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center justify-between text-[9px] font-num text-[var(--color-muted)] px-0.5">
+                    <span>0</span>
+                    <span className="text-[var(--color-gold-soft)] font-medium">10 km</span>
+                    <span>20 km</span>
+                  </div>
+                  <div className="flex h-1.5 w-full border border-[var(--color-border)] rounded-sm overflow-hidden bg-black/80">
+                    <div className="w-1/2 bg-[var(--color-gold)]/80 border-r border-black" />
+                    <div className="w-1/2 bg-white/35" />
+                  </div>
+                  <span className="text-[9px] text-center italic text-[var(--color-muted)] mt-0.5">
+                    1 cella = 10 km
+                  </span>
+                </div>
               </div>
             )}
           </div>
@@ -488,6 +617,35 @@ export default function Game() {
           <span className="ml-3 stat-key">Liv.</span><span className="stat-val font-num">{pg.livello}</span>
         </div>
       </footer>
+
+      {/* Pop-up Professione Mancante */}
+      {missingProfPopup && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in"
+          onClick={() => setMissingProfPopup(null)}
+        >
+          <div
+            className="panel p-6 max-w-sm w-full text-center flex flex-col items-center gap-3.5 border border-amber-600/80 shadow-[0_20px_60px_rgba(0,0,0,0.9)] bg-[#120f0d]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-12 h-12 rounded-full bg-amber-500/20 border border-amber-500/60 flex items-center justify-center text-amber-400 text-2xl font-bold">
+              !
+            </div>
+            <h3 className="font-display text-xl text-[var(--color-gold)]">
+              Professione mancante
+            </h3>
+            <p className="text-xs text-[var(--color-muted)] leading-relaxed">
+              La professione richiesta (<b className="text-[var(--color-ink)]">{missingProfPopup}</b>) non è configurata nelle maestrie del personaggio.
+            </p>
+            <button
+              onClick={() => setMissingProfPopup(null)}
+              className="btn btn-gold btn-sm px-6 py-1.5 mt-1 shadow-lg"
+            >
+              Chiudi
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

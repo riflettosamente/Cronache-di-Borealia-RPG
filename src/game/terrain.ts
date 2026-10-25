@@ -101,24 +101,32 @@ export const OVERLAY_CELLS: OverlayCell[] = (() => {
   return out;
 })();
 
-/** una cella è percorribile se non ha tile di blocco, oppure se cade dentro una regione (o se è mare/acqua aperta e si ha la barca) */
+/** una cella è percorribile se è terraferma o mare costiero (acqua bassa); il mare aperto richiede la barca */
 function walkableCell(c: number, r: number, hasBoat: boolean = false): boolean {
   if (c < 0 || r < 0 || c >= COLS || r >= ROWS) return false;
   const zone = cellVal(ZONE, c, r);
   const p = toPoint(c, r);
   const isBlocked = cellVal(BLOCK, c, r) !== -1;
-  const isSea = zone === 1 || (isBlocked && regionAtPoint(p.x, p.y) === null);
 
-  if (isSea) {
+  // Mare Aperto: fuori da tutte le zone (zone === -1) oppure blocchi esterni oltre la costa
+  const isOpenSea = zone === -1 || (isBlocked && zone !== 1 && regionAtPoint(p.x, p.y) === null);
+  if (isOpenSea) {
     return hasBoat;
   }
-  if (cellVal(BLOCK, c, r) === -1) return true;
-  return regionAtPoint(p.x, p.y) !== null;
+
+  // Zona 1 = "Mare" (acqua bassa costiera, percorribile a piedi per cercare conchiglie, pesci e granchi)
+  // Zone 2..7 = Terraferma
+  if (isBlocked && zone !== 1) {
+    return regionAtPoint(p.x, p.y) !== null;
+  }
+  return true;
 }
 
 export function isWalkable(x: number, y: number, hasBoat: boolean = false): boolean {
+  const { c, r } = toCell(x, y);
+  if (!walkableCell(c, r, hasBoat)) return false;
+
   const offsets = [
-    [0, 0],
     [AVATAR_RADIUS, 0],
     [-AVATAR_RADIUS, 0],
     [0, AVATAR_RADIUS],
@@ -131,8 +139,8 @@ export function isWalkable(x: number, y: number, hasBoat: boolean = false): bool
   for (const [dx, dy] of offsets) {
     const nx = x + dx;
     const ny = y + dy;
-    const { c, r } = toCell(nx, ny);
-    if (!walkableCell(c, r, hasBoat)) return false;
+    const cell = toCell(nx, ny);
+    if (!walkableCell(cell.c, cell.r, hasBoat)) return false;
   }
   return true;
 }
@@ -141,8 +149,10 @@ export function isWalkable(x: number, y: number, hasBoat: boolean = false): bool
 export function findPath(from: { x: number; y: number }, to: { x: number; y: number }, hasBoat: boolean = false) {
   const s = toCell(from.x, from.y);
   let g = toCell(to.x, to.y);
+  let clampedDestination = false;
 
   if (!walkableCell(g.c, g.r, hasBoat)) {
+    clampedDestination = true;
     let bestC = -1, bestR = -1, minDst = Infinity;
     for (let r = 0; r < ROWS; r++) {
       for (let c = 0; c < COLS; c++) {
@@ -161,7 +171,12 @@ export function findPath(from: { x: number; y: number }, to: { x: number; y: num
     g = { c: bestC, r: bestR };
   }
 
-  if (s.c === g.c && s.r === g.r) return [{ x: to.x, y: to.y }];
+  if (s.c === g.c && s.r === g.r) {
+    if (clampedDestination) {
+      return [toPoint(g.c, g.r)];
+    }
+    return [{ x: to.x, y: to.y }];
+  }
 
   const key = (c: number, r: number) => r * COLS + c;
   const prev = new Map<number, number>();
@@ -202,7 +217,15 @@ export function findPath(from: { x: number; y: number }, to: { x: number; y: num
     cur = p;
   }
   path.reverse();
-  // l'ultimo passo va esattamente dove ho cliccato
-  if (path.length) path[path.length - 1] = { x: to.x, y: to.y };
+
+  // Se la destinazione era calpestabile ed entro la terraferma, raffiniamo l'ultimo passo alle coordinate cliccate;
+  // se invece era in mare aperto o non calpestabile, ci fermiamo rigorosamente al centro della cella di riva
+  if (path.length) {
+    if (!clampedDestination && isWalkable(to.x, to.y, hasBoat)) {
+      path[path.length - 1] = { x: to.x, y: to.y };
+    } else {
+      path[path.length - 1] = toPoint(g.c, g.r);
+    }
+  }
   return path;
 }
