@@ -18,6 +18,10 @@ const BIOME_COLORS: Record<string, string> = {
   palude: "#6b7c46",
   isola: "#2e6b8a",
   mare: "#2e6b8a",
+  fiume: "#3d8fa8",
+  lago: "#3d8fa8",
+  "fiume o lago": "#3d8fa8",
+  fiume_lago: "#3d8fa8",
 };
 
 export default function RegionInspector({ current, onClose }: RegionInspectorProps) {

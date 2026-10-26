@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import cutouts from "@/game/data/cutouts.json";
 import { asset } from "@/game/assets";
-import { MAP_W, MAP_H, terrainAt, TERRAIN, TERRAIN_COLORS, OVERLAY_CELLS } from "@/game/terrain";
+import { MAP_W, MAP_H, terrainAt, TERRAIN, TERRAIN_COLORS, OVERLAY_CELLS, COLS, ROWS } from "@/game/terrain";
 import RegionInspector from "./RegionInspector";
 import { Compass } from "lucide-react";
 
@@ -35,6 +35,7 @@ interface WorldMapProps {
   inspect: boolean;
   onCloseInspect: () => void;
   showZones: boolean;
+  selectedCell?: { c: number; r: number } | null;
   overlayOpen: boolean;
   isPaused: boolean;
   cursor: { x: number; y: number } | null;
@@ -56,6 +57,7 @@ export default function WorldMap({
   inspect,
   onCloseInspect,
   showZones,
+  selectedCell,
   overlayOpen,
   isPaused,
   cursor,
@@ -75,7 +77,7 @@ export default function WorldMap({
   return (
     <div className="absolute inset-0 flex items-center justify-center">
       <div
-        className={`relative ${moving || overlayOpen || isPaused ? "" : "map-wrap"}`}
+        className={`relative ${showZones ? "cursor-pointer" : moving || overlayOpen || isPaused ? "" : "map-wrap"}`}
         style={{ width: stage.w || "100%", height: stage.h || "100%" }}
         onMouseMove={onMouseMove}
         onMouseLeave={onMouseLeave}
@@ -116,6 +118,19 @@ export default function WorldMap({
             alt="Layer zone"
             draggable={false}
             className="zone-layer pointer-events-none absolute inset-0 h-full w-full"
+          />
+        )}
+
+        {/* Evidenziazione cella selezionata in modalità ZONE */}
+        {showZones && selectedCell && (
+          <div
+            className="pointer-events-none absolute z-20 border-2 border-amber-300 bg-amber-400/25 shadow-[0_0_15px_rgba(251,191,36,0.9)] animate-pulse rounded-[1px]"
+            style={{
+              left: `${(selectedCell.c / COLS) * 100}%`,
+              top: `${(selectedCell.r / ROWS) * 100}%`,
+              width: `${(1 / COLS) * 100}%`,
+              height: `${(1 / ROWS) * 100}%`,
+            }}
           />
         )}
 
@@ -192,8 +207,11 @@ export default function WorldMap({
               top: `${(cursor.y / MAP_H) * 100}%`,
             }}
           >
-            <span className="panel px-2.5 py-1 font-display text-xs text-[var(--color-gold-soft)] shadow-xl bg-black/90 border border-[var(--color-gold)]/60">
-              {terrainAt(cursor.x, cursor.y)}
+            <span className="panel px-2.5 py-1 font-display text-xs text-[var(--color-gold-soft)] shadow-xl bg-black/90 border border-[var(--color-gold)]/60 flex items-center gap-1.5 whitespace-nowrap">
+              <span>{terrainAt(cursor.x, cursor.y)}</span>
+              <span className="text-[10px] text-amber-300/80 font-sans italic font-normal">
+                · Clicca per risorse
+              </span>
             </span>
           </div>
         )}

@@ -3,7 +3,7 @@ import {
   DATA, REGIONS, GATHERABLES, ITEMS, EDIBLE, initPG, initProfessioni, rollSpawns, spawnEnemy,
   gatherLoot, professionLevelFor, xpForLevel, hasBoat, type PG, type Professione, type Spawn, type Enemy,
 } from "@/game/engine";
-import { MAP_W, MAP_H, findPath, isWalkable, regionAt, terrainAt } from "@/game/terrain";
+import { MAP_W, MAP_H, findPath, isWalkable, regionAt, terrainAt, toCell } from "@/game/terrain";
 import { asset } from "@/game/assets";
 import RegionScene, { type GatherResult } from "./RegionScene";
 import CombatScene from "./CombatScene";
@@ -11,8 +11,8 @@ import TopNav from "./TopNav";
 import BottomBar from "./BottomBar";
 import WorldMap from "./WorldMap";
 import {
-  CharacterPanel, BagPanel, DiaryPanel, AtlasPanel, BestiaryPanel,
-  PANEL_LABEL, PANEL_KEY, type PanelId, type LogEntry,
+  CharacterPanel, BagPanel, DiaryPanel, AtlasPanel, BestiaryPanel, ZonePanel,
+  PANEL_LABEL, PANEL_KEY, type PanelId, type LogEntry, type SelectedZoneData,
 } from "./Panels";
 import { playGatherSound } from "@/game/audio";
 
@@ -49,6 +49,7 @@ export default function Game() {
   const [panel, setPanel] = useState<PanelId | null>(null);
   const [inspect, setInspect] = useState(false);
   const [showZones, setShowZones] = useState(false);
+  const [selectedZone, setSelectedZone] = useState<SelectedZoneData | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [missingProfPopup, setMissingProfPopup] = useState<string | null>(null);
 
@@ -105,6 +106,7 @@ export default function Game() {
       const next = !prev;
       if (next) {
         setShowZones(false);
+        setSelectedZone(null);
         if (walkTimer.current) { clearTimeout(walkTimer.current); setMoving(false); setTarget(null); }
       }
       return next;
@@ -117,6 +119,9 @@ export default function Game() {
       if (next) {
         setInspect(false);
         if (walkTimer.current) { clearTimeout(walkTimer.current); setMoving(false); setTarget(null); }
+      } else {
+        setSelectedZone(null);
+        setPanel((p) => (p === "zona" ? null : p));
       }
       return next;
     });
@@ -126,11 +131,19 @@ export default function Game() {
   useEffect(() => {
     if (view === "menu" || view === "dead") return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") { setInspect(false); setShowZones(false); setPanel(null); return; }
+      if (e.key === "Escape") {
+        setInspect(false);
+        setShowZones(false);
+        setSelectedZone(null);
+        setPanel(null);
+        return;
+      }
       const k = e.key.toUpperCase();
       if (k === "R") { toggleInspect(); return; }
       if (k === "Z") { toggleZones(); return; }
-      const hit = (Object.keys(PANEL_KEY) as PanelId[]).find((p) => PANEL_KEY[p] === k);
+      const hit = (Object.keys(PANEL_KEY) as PanelId[])
+        .filter((p) => p !== "zona")
+        .find((p) => PANEL_KEY[p] === k);
       if (hit) setPanel((cur) => (cur === hit ? null : hit));
     };
     window.addEventListener("keydown", onKey);
@@ -253,9 +266,26 @@ export default function Game() {
     if (spawns.length > 0) { addLog("Hai già battuto questa zona: cerca un po' più in là…", "warn"); return; }
     const r = REGIONS[regionId];
     setTurno((t) => t + 1);
+
+    // Riconosce se il giocatore si trova su un tile d'acqua dolce (Fiume o Lago) o salata (Mare)
+    const localTerrain = terrainAt(avatar.x, avatar.y);
+    const effectiveBiome =
+      localTerrain === "Fiume o Lago"
+        ? "fiume_lago"
+        : localTerrain === "Mare"
+        ? "mare"
+        : r.biome;
+
     if (Math.random() < DATA.spawnChance) { setEnemy(spawnEnemy(r.biome)); setView("combat"); return; }
-    setSpawns(rollSpawns(r.biome)); setExplored(true);
-    addLog("Esplori i dintorni e scorgi qualcosa fra la vegetazione.", "info");
+    setSpawns(rollSpawns(effectiveBiome)); setExplored(true);
+
+    if (effectiveBiome === "fiume_lago" || localTerrain === "Fiume o Lago") {
+      addLog("Scorgi le acque di fiume e lago: pesci guizzano tra i flutti e creature palustri popolano le rive.", "info");
+    } else if (effectiveBiome === "mare" || localTerrain === "Mare") {
+      addLog("Esplori la battigia e le onde marine in cerca di crostacei e pesci d'alto mare.", "info");
+    } else {
+      addLog("Esplori i dintorni e scorgi qualcosa fra la vegetazione.", "info");
+    }
   };
 
   const gather = (key: number): GatherResult | null => {
@@ -424,12 +454,23 @@ export default function Game() {
           inspect={inspect}
           onCloseInspect={() => setInspect(false)}
           showZones={showZones}
+          selectedCell={selectedZone?.cell ?? null}
           overlayOpen={overlayOpen}
           isPaused={isPaused}
           cursor={cursor}
           distKm={distKm}
           onMapClick={(e) => {
-            if (overlayOpen || isPaused) return;
+            if (overlayOpen || inspect) return;
+            if (showZones) {
+              const p = toMap(e);
+              const terrain = terrainAt(p.x, p.y);
+              const cell = toCell(p.x, p.y);
+              const rid = regionAt(p.x, p.y);
+              setSelectedZone({ terrain, regionId: rid, cell });
+              setPanel("zona");
+              return;
+            }
+            if (isPaused) return;
             travel(toMap(e));
           }}
           onMouseMove={(e) => {
@@ -474,8 +515,19 @@ export default function Game() {
         {panel && (
           <section className="panel absolute right-3 top-3 bottom-3 z-40 flex w-[420px] max-w-[92vw] flex-col shadow-[0_20px_60px_rgba(0,0,0,.8)]">
             <header className="flex shrink-0 items-center justify-between border-b border-[var(--color-border)] px-4 py-2.5">
-              <h2 className="font-display text-lg text-[var(--color-gold)]">{PANEL_LABEL[panel]}</h2>
-              <button onClick={() => setPanel(null)} className="btn btn-sm" title="Chiudi (Esc)">✕</button>
+              <h2 className="font-display text-lg text-[var(--color-gold)] truncate">
+                {panel === "zona" && selectedZone ? `${selectedZone.terrain}` : PANEL_LABEL[panel]}
+              </h2>
+              <button
+                onClick={() => {
+                  setPanel(null);
+                  setSelectedZone(null);
+                }}
+                className="btn btn-sm"
+                title="Chiudi (Esc)"
+              >
+                ✕
+              </button>
             </header>
             <div className="log-scroll min-h-0 flex-1 overflow-y-auto p-4">
               {panel === "pg" && <CharacterPanel pg={pg} professions={professions} />}
@@ -483,6 +535,7 @@ export default function Game() {
               {panel === "diario" && <DiaryPanel log={log} />}
               {panel === "atlante" && <AtlasPanel current={regionId} onGo={goToRegion} />}
               {panel === "bestiario" && <BestiaryPanel />}
+              {panel === "zona" && selectedZone && <ZonePanel zone={selectedZone} />}
             </div>
           </section>
         )}

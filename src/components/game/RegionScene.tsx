@@ -46,7 +46,7 @@ export default function RegionScene({
 
     setTimeout(() => {
       setFloatingNotices((prev) => prev.filter((n) => n.id !== id));
-    }, 1400);
+    }, 1800);
   };
   return (
     <div className="scene relative w-full h-full flex flex-col justify-between overflow-hidden bg-black select-none">
@@ -136,24 +136,24 @@ export default function RegionScene({
           );
         })}
 
-        {/* Testo Fluttuante di Raccolta (Loot ed XP che scorrono verso l'alto) */}
+        {/* Testo Fluttuante di Raccolta (Loot ed XP fluidi, velocità indipendenti, solo testo senza contorni né sfondo) */}
         {floatingNotices.map((notice) => (
           <div
             key={notice.id}
-            className="floating-gather-notice"
+            className="pointer-events-none absolute z-40"
             style={{
               left: `${notice.x}%`,
               top: `${notice.y}%`,
             }}
           >
-            {/* Scritta Oggetto Raccolto (oro / bianco brillante con badge) */}
-            <span className="font-display font-bold text-xs sm:text-sm tracking-wide text-amber-200 bg-black/85 px-2.5 py-0.5 rounded border border-amber-500/70 shadow-xl whitespace-nowrap">
+            {/* Scritta Oggetto Raccolto (solo testo fluido) */}
+            <div className="floating-loot-text font-display font-bold text-sm sm:text-base tracking-wide text-amber-200 whitespace-nowrap select-none">
               {notice.lootText}
-            </span>
-            {/* Scritta XP di avvenuta raccolta (verde smeraldo brillante) */}
-            <span className="font-display font-semibold text-[11px] sm:text-xs tracking-wider text-emerald-300 bg-black/85 px-2 py-0.5 rounded border border-emerald-500/60 shadow-lg whitespace-nowrap">
+            </div>
+            {/* Scritta XP (velocità differente, movimento fluido verso l'alto) */}
+            <div className="floating-xp-text font-display font-semibold text-xs sm:text-sm tracking-wider text-emerald-300 whitespace-nowrap select-none">
               ✦ {notice.xpText}
-            </span>
+            </div>
           </div>
         ))}
 

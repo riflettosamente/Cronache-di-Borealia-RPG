@@ -37,8 +37,22 @@ export const FUGA_TEXTS = DATA.fuga;
 
 // zona -> tabella raccolta (bioma regione, dal tilebloczone originale)
 const BIOME_TO_ZONE: Record<string, string> = {
-  pianura: "pianura", foresta: "bosco", montagna: "montagne",
-  deserto: "deserto", palude: "palude", isola: "mare", mare: "mare",
+  pianura: "pianura",
+  foresta: "bosco",
+  bosco: "bosco",
+  "bosco o foresta": "bosco",
+  montagna: "montagne",
+  montagne: "montagne",
+  deserto: "deserto",
+  palude: "palude",
+  isola: "mare",
+  mare: "mare",
+  fiume: "fiume_lago",
+  lago: "fiume_lago",
+  "fiume o lago": "fiume_lago",
+  "fiume/lago": "fiume_lago",
+  fiume_lago: "fiume_lago",
+  "mare aperto": "mare",
 };
 
 // alias display loot -> id icona inventario (dai punti immagine originali)
@@ -144,15 +158,19 @@ export function spawnEnemy(biome: string): Enemy {
 
 // ---------- Esplorazione ----------
 export function zoneTableFor(biome: string): string[] {
-  const z = BIOME_TO_ZONE[biome] ?? "pianura";
+  const norm = (biome || "").toLowerCase().trim();
+  const z = BIOME_TO_ZONE[norm] ?? BIOME_TO_ZONE[norm.replace(/\s+/g, "_")] ?? "pianura";
   return DATA.zoneTables[z] ?? [];
 }
 export function rollSpawns(biome: string): Spawn[] {
   const table = zoneTableFor(biome);
-  const n = rand(3, 6);
+  if (!table || table.length === 0) return [];
+  const targetCount = Math.min(table.length, rand(3, 5));
   const picked = new Set<string>();
   let guard = 0;
-  while (picked.size < n && guard++ < 30) picked.add(choice(table));
+  while (picked.size < targetCount && guard++ < 30) {
+    picked.add(choice(table));
+  }
   let key = 0;
   return [...picked].map((gid) => ({
     key: key++, gid,

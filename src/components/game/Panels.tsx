@@ -3,6 +3,8 @@ import {
   REGIONS,
   MONSTERS,
   EDIBLE,
+  GATHERABLES,
+  zoneTableFor,
   xpForLevel,
   iconForLoot,
   lootIconId,
@@ -11,7 +13,7 @@ import {
 } from "@/game/engine";
 import { asset } from "@/game/assets";
 
-export type PanelId = "pg" | "borsa" | "diario" | "atlante" | "bestiario";
+export type PanelId = "pg" | "borsa" | "diario" | "atlante" | "bestiario" | "zona";
 
 export const PANEL_LABEL: Record<PanelId, string> = {
   pg: "Personaggio",
@@ -19,6 +21,7 @@ export const PANEL_LABEL: Record<PanelId, string> = {
   diario: "Diario",
   atlante: "Atlante",
   bestiario: "Bestiario",
+  zona: "Risorse della Cella / Zona",
 };
 
 export const PANEL_KEY: Record<PanelId, string> = {
@@ -27,6 +30,7 @@ export const PANEL_KEY: Record<PanelId, string> = {
   diario: "L",
   atlante: "M",
   bestiario: "B",
+  zona: "Z",
 };
 
 export interface LogEntry {
@@ -545,6 +549,160 @@ export function BestiaryPanel() {
             );
           })}
         </div>
+      </div>
+    </div>
+  );
+}
+
+/* ----------------------------------------------------
+   6. PANNELLO RISORSE CELLA / ZONA (Click su mappa con layer ZONE attivo)
+---------------------------------------------------- */
+export interface SelectedZoneData {
+  terrain: string;
+  regionId: number | null;
+  cell: { c: number; r: number };
+}
+
+export function ZonePanel({ zone }: { zone: SelectedZoneData }) {
+  const gids = zoneTableFor(zone.terrain);
+  const gatherables = gids
+    .map((gid) => GATHERABLES.find((g) => g.id === gid))
+    .filter((g): g is NonNullable<typeof g> => Boolean(g));
+
+  const reg = zone.regionId !== null ? REGIONS.find((r) => r.id === zone.regionId) : null;
+
+  const terrainThemes: Record<string, { color: string; badge: string; icon: string }> = {
+    Mare: { color: "#2e6b8a", badge: "Acque Salate", icon: "🌊" },
+    "Mare aperto": { color: "#2e6b8a", badge: "Acque Salate", icon: "🌊" },
+    "Fiume o Lago": { color: "#3d8fa8", badge: "Acqua Dolce", icon: "🏞️" },
+    Palude: { color: "#6b7c46", badge: "Acquitrino", icon: "🌿" },
+    Deserto: { color: "#c9a24b", badge: "Arido", icon: "🏜️" },
+    Pianura: { color: "#7fa055", badge: "Prateria", icon: "🌾" },
+    "Bosco o Foresta": { color: "#3e6b34", badge: "Silvano", icon: "🌲" },
+    Montagne: { color: "#8d8d94", badge: "Roccioso", icon: "🏔️" },
+  };
+
+  const theme = terrainThemes[zone.terrain] ?? { color: "#8d8d94", badge: "Terreno", icon: "🗺️" };
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Intestazione Cella & Terreno */}
+      <div className="panel-inset p-3.5 flex flex-col gap-2 bg-black/40 border border-[var(--color-border)]">
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-xl">{theme.icon}</span>
+              <h3 className="font-display text-lg text-[var(--color-gold)] font-bold">
+                {zone.terrain}
+              </h3>
+            </div>
+            <p className="text-xs text-[var(--color-muted)] mt-0.5">
+              {reg ? (
+                <>
+                  Regione: <b className="text-[var(--color-ink)]">{reg.name}</b> (#{String(reg.id + 1).padStart(2, "0")})
+                </>
+              ) : (
+                "Oltre i confini delle regioni note (Terre Aperte)"
+              )}
+            </p>
+          </div>
+          <div className="text-right">
+            <span
+              className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded font-semibold text-white shadow"
+              style={{ backgroundColor: theme.color }}
+            >
+              {theme.badge}
+            </span>
+            <div className="text-[10px] font-num text-[var(--color-muted)] mt-1">
+              Cella [{zone.cell.c}, {zone.cell.r}]
+            </div>
+          </div>
+        </div>
+
+        <p className="text-[11px] text-[var(--color-muted)] italic border-t border-[var(--color-border)]/50 pt-2">
+          Questa cella ospita <b className="text-[var(--color-gold-soft)] font-num">{gatherables.length}</b> tipologie di risorse reperibili tramite le professioni adatte.
+        </p>
+      </div>
+
+      {/* Tabella dei Raccoglibili */}
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-display text-[var(--color-gold-soft)] uppercase tracking-wider">
+            Raccoglibili nel Bioma
+          </span>
+          <span className="text-[11px] font-num text-[var(--color-muted)]">
+            {gatherables.length} specie presenti
+          </span>
+        </div>
+
+        {gatherables.length === 0 ? (
+          <div className="p-4 text-center text-xs text-[var(--color-muted)] border border-dashed border-[var(--color-border)] rounded">
+            Nessun raccoglibile catalogato per questo terreno.
+          </div>
+        ) : (
+          <div className="flex flex-col gap-1.5 max-h-[50vh] overflow-y-auto log-scroll pr-1">
+            {gatherables.map((g) => {
+              const lootList = g.loot;
+              const hasEdible = lootList.some(([n]) => {
+                const id = lootIconId(n);
+                return id && EDIBLE[id] !== undefined;
+              });
+
+              return (
+                <div
+                  key={g.id}
+                  className="p-2.5 rounded bg-black/50 border border-[var(--color-border)] hover:border-[var(--color-gold)]/60 transition-colors flex items-center justify-between gap-3 shadow-sm"
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-10 h-10 rounded bg-black/60 border border-[var(--color-border)]/80 flex items-center justify-center shrink-0 p-1">
+                      <img
+                        src={asset(g.sprite)}
+                        alt={g.id}
+                        className="w-full h-full object-contain drop-shadow"
+                        onError={(e) => {
+                          (e.currentTarget as HTMLElement).style.display = "none";
+                        }}
+                      />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-display text-sm font-semibold text-[var(--color-ink)] capitalize truncate">
+                          {g.id}
+                        </span>
+                        {hasEdible && (
+                          <span className="text-[9px] px-1 py-0.2 rounded bg-emerald-950/80 border border-emerald-500/50 text-emerald-300 font-semibold">
+                            Cibo
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5 text-[11px] text-[var(--color-muted)]">
+                        <span className="text-[var(--color-gold-soft)] font-medium">
+                          {g.azione}
+                        </span>
+                        <span>·</span>
+                        <span>{g.professione}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="text-right shrink-0">
+                    <div className="text-xs font-medium text-amber-200">
+                      {lootList.map(([name, qty]) => `${name} x${qty}`).join(", ")}
+                    </div>
+                    <div className="text-[10px] text-[var(--color-muted)] mt-0.5">
+                      +1 XP {g.professione}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Nota Professione */}
+      <div className="p-2.5 rounded bg-[var(--color-gold)]/10 border border-[var(--color-gold)]/30 text-[11px] text-[var(--color-gold-soft)]">
+        💡 <b>Consiglio di Raccolta:</b> salendo di livello nella professione corrispondente aumenti la possibilità di ottenere il doppio del bottino da ciascun nodo.
       </div>
     </div>
   );

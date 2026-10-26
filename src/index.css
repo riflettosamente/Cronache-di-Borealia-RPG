@@ -207,38 +207,60 @@ body {
 @keyframes litin { from { opacity: 0; transform: scale(.99); } to { opacity: 1; transform: scale(1); } }
 @keyframes glowpulse { 0%, 100% { opacity: .38; } 50% { opacity: .75; } }
 
-@keyframes floatUpFade {
+/* Animazioni fluide verso l'alto per raccolta risorse: velocità differenti, zero scatti */
+@keyframes floatUpSmoothLoot {
   0% {
     opacity: 0;
-    transform: translate(-50%, -20%) scale(0.85);
+    transform: translate(-50%, 0);
   }
   15% {
     opacity: 1;
-    transform: translate(-50%, -60%) scale(1.08);
-  }
-  30% {
-    opacity: 1;
-    transform: translate(-50%, -85%) scale(1);
+    transform: translate(-50%, -15px);
   }
   75% {
-    opacity: 0.95;
-    transform: translate(-50%, -130%) scale(0.98);
+    opacity: 1;
+    transform: translate(-50%, -42px);
   }
   100% {
     opacity: 0;
-    transform: translate(-50%, -170%) scale(0.92);
+    transform: translate(-50%, -60px);
   }
 }
 
-.floating-gather-notice {
+@keyframes floatUpSmoothXP {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 18px);
+  }
+  12% {
+    opacity: 1;
+    transform: translate(-50%, 2px);
+  }
+  65% {
+    opacity: 1;
+    transform: translate(-50%, -50px);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -92px);
+  }
+}
+
+.floating-loot-text {
   position: absolute;
-  pointer-events: none;
-  z-index: 40;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  animation: floatUpFade 1.4s cubic-bezier(0.2, 0.8, 0.3, 1) forwards;
-  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.95));
+  left: 0;
+  top: 0;
+  will-change: transform, opacity;
+  animation: floatUpSmoothLoot 1.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95), 0 2px 8px rgba(0, 0, 0, 0.9), 0 0 14px rgba(0, 0, 0, 0.8);
+}
+
+.floating-xp-text {
+  position: absolute;
+  left: 0;
+  top: 0;
+  will-change: transform, opacity;
+  animation: floatUpSmoothXP 1.25s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95), 0 2px 8px rgba(0, 0, 0, 0.9), 0 0 14px rgba(16, 185, 129, 0.5);
 }
 
