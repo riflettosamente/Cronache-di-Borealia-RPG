@@ -1,13 +1,22 @@
+import { useState } from "react";
 import { GATHERABLES, type RegionData, type Spawn } from "@/game/engine";
 import { asset } from "@/game/assets";
 import { Compass, Flame, ArrowLeft, Eye } from "lucide-react";
+
+export interface GatherResult {
+  x: number;
+  y: number;
+  lootText: string;
+  xpText: string;
+  professione: string;
+}
 
 interface RegionSceneProps {
   region: RegionData;
   spawns: Spawn[];
   explored: boolean;
   onExplore: () => void;
-  onGather: (key: number) => void;
+  onGather: (key: number) => GatherResult | null;
   onCamp: () => void;
   onLeave: () => void;
 }
@@ -21,6 +30,24 @@ export default function RegionScene({
   onCamp,
   onLeave,
 }: RegionSceneProps) {
+  const [floatingNotices, setFloatingNotices] = useState<
+    { id: number; x: number; y: number; lootText: string; xpText: string }[]
+  >([]);
+
+  const handleGatherClick = (key: number) => {
+    const res = onGather(key);
+    if (!res) return;
+
+    const id = Date.now() + Math.random();
+    setFloatingNotices((prev) => [
+      ...prev,
+      { id, x: res.x, y: res.y, lootText: res.lootText, xpText: res.xpText },
+    ]);
+
+    setTimeout(() => {
+      setFloatingNotices((prev) => prev.filter((n) => n.id !== id));
+    }, 1400);
+  };
   return (
     <div className="scene relative w-full h-full flex flex-col justify-between overflow-hidden bg-black select-none">
       {/* Sfondo illustrato con animazione Ken Burns */}
@@ -77,7 +104,7 @@ export default function RegionScene({
           return (
             <button
               key={spawn.key}
-              onClick={() => onGather(spawn.key)}
+              onClick={() => handleGatherClick(spawn.key)}
               className="pickup group"
               style={{
                 left: `${spawn.x}%`,
@@ -108,6 +135,27 @@ export default function RegionScene({
             </button>
           );
         })}
+
+        {/* Testo Fluttuante di Raccolta (Loot ed XP che scorrono verso l'alto) */}
+        {floatingNotices.map((notice) => (
+          <div
+            key={notice.id}
+            className="floating-gather-notice"
+            style={{
+              left: `${notice.x}%`,
+              top: `${notice.y}%`,
+            }}
+          >
+            {/* Scritta Oggetto Raccolto (oro / bianco brillante con badge) */}
+            <span className="font-display font-bold text-xs sm:text-sm tracking-wide text-amber-200 bg-black/85 px-2.5 py-0.5 rounded border border-amber-500/70 shadow-xl whitespace-nowrap">
+              {notice.lootText}
+            </span>
+            {/* Scritta XP di avvenuta raccolta (verde smeraldo brillante) */}
+            <span className="font-display font-semibold text-[11px] sm:text-xs tracking-wider text-emerald-300 bg-black/85 px-2 py-0.5 rounded border border-emerald-500/60 shadow-lg whitespace-nowrap">
+              ✦ {notice.xpText}
+            </span>
+          </div>
+        ))}
 
         {/* Messaggio centrale se non ci sono elementi attivi */}
         {spawns.length === 0 && (

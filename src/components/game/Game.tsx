@@ -3,47 +3,30 @@ import {
   DATA, REGIONS, GATHERABLES, ITEMS, EDIBLE, initPG, initProfessioni, rollSpawns, spawnEnemy,
   gatherLoot, professionLevelFor, xpForLevel, hasBoat, type PG, type Professione, type Spawn, type Enemy,
 } from "@/game/engine";
-import { MAP_W, MAP_H, findPath, isWalkable, regionAt, terrainAt, OVERLAY_CELLS, TERRAIN, TERRAIN_COLORS } from "@/game/terrain";
-import cutouts from "@/game/data/cutouts.json";
+import { MAP_W, MAP_H, findPath, isWalkable, regionAt, terrainAt } from "@/game/terrain";
 import { asset } from "@/game/assets";
-import RegionScene from "./RegionScene";
+import RegionScene, { type GatherResult } from "./RegionScene";
 import CombatScene from "./CombatScene";
-import RegionInspector from "./RegionInspector";
+import TopNav from "./TopNav";
+import BottomBar from "./BottomBar";
+import WorldMap from "./WorldMap";
 import {
   CharacterPanel, BagPanel, DiaryPanel, AtlasPanel, BestiaryPanel,
   PANEL_LABEL, PANEL_KEY, type PanelId, type LogEntry,
 } from "./Panels";
-import { Compass, Maximize, Minimize } from "lucide-react";
+import { playGatherSound } from "@/game/audio";
 
 export const GAME_TITLE = "Cronache di Borealia";
-export const GAME_VERSION = "alfa 0.20";
+export const GAME_VERSION = "alfa 0.22";
 export const GAME_SUBTITLE = "Terre Inesplorate";
 
 type View = "menu" | "map" | "region" | "combat" | "dead";
-const SAVE = "rpg-alfa-020";
+const SAVE = "rpg-alfa-022";
 let logId = 1;
 
 interface Save {
   pg: PG; professions: Record<string, Professione>; inventory: Record<string, number>;
   avatar: { x: number; y: number }; regionId: number | null; turno: number;
-}
-
-/** genera il layer "Zone" (tilebloczone originale) come immagine canvas 1920x1080 */
-function buildZoneLayer(): string {
-  const cv = document.createElement("canvas");
-  cv.width = MAP_W; cv.height = MAP_H;
-  const ctx = cv.getContext("2d")!;
-  ctx.globalAlpha = 1.0;
-  for (const cell of OVERLAY_CELLS) {
-    if (cell.zone > 0) {
-      ctx.fillStyle = TERRAIN_COLORS[cell.zone] ?? "#888";
-      ctx.fillRect(cell.x, cell.y, cell.w, cell.h);
-      ctx.strokeStyle = "rgba(0,0,0,0.3)";
-      ctx.lineWidth = 1;
-      ctx.strokeRect(cell.x, cell.y, cell.w, cell.h);
-    }
-  }
-  return cv.toDataURL("image/png");
 }
 
 export default function Game() {
@@ -66,7 +49,6 @@ export default function Game() {
   const [panel, setPanel] = useState<PanelId | null>(null);
   const [inspect, setInspect] = useState(false);
   const [showZones, setShowZones] = useState(false);
-  const [zoneLayer, setZoneLayer] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [missingProfPopup, setMissingProfPopup] = useState<string | null>(null);
 
@@ -95,14 +77,6 @@ export default function Game() {
       document.exitFullscreen().catch(() => {});
     }
   };
-
-  /* ---- layer zone prerendered (una sola volta) ---- */
-  useEffect(() => {
-    if (showZones && !zoneLayer) {
-      const id = requestAnimationFrame(() => setZoneLayer(buildZoneLayer()));
-      return () => cancelAnimationFrame(id);
-    }
-  }, [showZones, zoneLayer]);
 
   /* ---- dimensione del "palco" 16:9 dentro l'area disponibile ---- */
   useLayoutEffect(() => {
@@ -284,10 +258,10 @@ export default function Game() {
     addLog("Esplori i dintorni e scorgi qualcosa fra la vegetazione.", "info");
   };
 
-  const gather = (key: number) => {
+  const gather = (key: number): GatherResult | null => {
     const sp = spawns.find((s) => s.key === key);
     const g = sp && GATHERABLES.find((x) => x.id === sp.gid);
-    if (!sp || !g) return;
+    if (!sp || !g) return null;
 
     const profName = g.professione;
     const prof = professions[profName];
@@ -295,7 +269,7 @@ export default function Game() {
     if (!prof) {
       setMissingProfPopup(profName || "Sconosciuta");
       addLog(`Attenzione: professione mancante per ${g.id} (${profName || "non configurata"}).`, "warn");
-      return;
+      return null;
     }
 
     const loot = gatherLoot(g, prof);
@@ -304,11 +278,26 @@ export default function Game() {
       for (const [name, q] of loot) n[name] = (n[name] ?? 0) + q;
       return n;
     });
+
+    const lootText = loot.map(([name, q]) => `+${q} ${name}`).join(", ");
+    const xpText = `+1 XP ${profName}`;
+
     addLog(`${g.azione} ${g.id}: ${loot.map(([n, q]) => `${n} +${q}`).join(", ")}.`, "loot");
     const nx = prof.xp + 1, nl = professionLevelFor(nx);
     if (nl > prof.livello) addLog(`${profName} sale al livello ${nl}!`, "good");
     setProfessions((p) => ({ ...p, [profName]: { xp: nx, livello: nl } }));
     setSpawns((s) => s.filter((x) => x.key !== key));
+
+    // Effetto sonoro procedurale dedicato
+    playGatherSound(profName);
+
+    return {
+      x: sp.x,
+      y: sp.y,
+      lootText,
+      xpText,
+      professione: profName,
+    };
   };
 
   const camp = () => {
@@ -405,161 +394,63 @@ export default function Game() {
   return (
     <div className="flex h-screen flex-col overflow-hidden">
       {/* ---------- barra comandi ---------- */}
-      <header className="flex shrink-0 items-center gap-5 border-b border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2">
-        <h1 className="font-display text-lg tracking-wide text-[var(--color-gold)]">
-          {GAME_TITLE} <span className="ml-1 font-body text-xs italic text-[var(--color-muted)]">{GAME_VERSION} — {GAME_SUBTITLE}</span>
-        </h1>
-        <nav className="flex items-center gap-1.5">
-          {(Object.keys(PANEL_LABEL) as PanelId[]).map((p) => (
-            <button key={p} onClick={() => setPanel((c) => (c === p ? null : p))}
-              className={`btn btn-sm ${panel === p ? "btn-gold" : ""}`} title={`Tasto ${PANEL_KEY[p]}`}>
-              {PANEL_LABEL[p]}
-            </button>
-          ))}
-          <span className="mx-1 h-5 w-px bg-[var(--color-border)]" />
-          <button onClick={toggleInspect}
-            className={`btn btn-sm ${inspect ? "btn-gold" : ""}`} title="Verifica regioni (tasto R)">
-            Regioni
-          </button>
-          <button onClick={toggleZones}
-            className={`btn btn-sm ${showZones ? "btn-gold" : ""}`} title="Layer zone di terreno (tasto Z)">
-            Zone
-          </button>
-        </nav>
-        <div className="ml-auto flex items-center gap-3">
-          {isPaused && <span className="pause-badge text-[10px]">IN PAUSA</span>}
-          <span className="text-xs text-[var(--color-muted)]">Turno <b className="font-num text-[var(--color-gold-soft)]">{turno}</b></span>
-          <button
-            onClick={toggleFullscreen}
-            className={`btn btn-sm ${isFullscreen ? "btn-gold" : ""}`}
-            title={isFullscreen ? "Esci da Schermo Intero" : "Schermo Intero"}
-          >
-            {isFullscreen ? <Minimize className="h-3.5 w-3.5" /> : <Maximize className="h-3.5 w-3.5" />}
-            <span>Full screen</span>
-          </button>
-          <button onClick={() => setView("menu")} className="btn btn-sm">Menu</button>
-        </div>
-      </header>
+      <TopNav
+        title={GAME_TITLE}
+        version={GAME_VERSION}
+        subtitle={GAME_SUBTITLE}
+        panel={panel}
+        onTogglePanel={(p) => setPanel((c) => (c === p ? null : p))}
+        inspect={inspect}
+        onToggleInspect={toggleInspect}
+        showZones={showZones}
+        onToggleZones={toggleZones}
+        isPaused={isPaused}
+        turno={turno}
+        isFullscreen={isFullscreen}
+        onToggleFullscreen={toggleFullscreen}
+        onGoMenu={() => setView("menu")}
+      />
 
       {/* ---------- area di gioco: la mappa è la pagina ---------- */}
       <div ref={areaRef} className="relative min-h-0 flex-1 bg-black">
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div
-            className={`relative ${moving || overlayOpen || isPaused ? "" : "map-wrap"}`}
-            style={{ width: stage.w || "100%", height: stage.h || "100%" }}
-            onMouseMove={(e) => { if (overlayOpen || inspect) return; const p = toMap(e); setCursor(p); setHoverId(regionAt(p.x, p.y)); }}
-            onMouseLeave={() => { if (inspect) return; setCursor(null); setHoverId(null); }}
-            onClick={(e) => { if (overlayOpen || isPaused) return; travel(toMap(e)); }}
-          >
-            {/* LAYER 0 — mappa del mondo (sfondo-sheet0.png originale) */}
-            <img src={asset("sprites/map.jpg")} alt="Mappa del mondo" draggable={false} className="absolute inset-0 h-full w-full" />
-
-            {/* LAYER 1 — sagome reali delle 23 regioni (alpha di regioneN-sheet0.png) */}
-            {cutouts.map((c) => {
-              const cur = regionId === c.id;
-              return (
-                <img key={c.id} src={asset(c.file)} alt="" draggable={false}
-                  className={`cutout ${cur ? "cutout-active" : ""}`}
-                  style={{ left: `${(c.x / MAP_W) * 100}%`, top: `${(c.y / MAP_H) * 100}%`, width: `${(c.w / MAP_W) * 100}%`, height: `${(c.h / MAP_H) * 100}%` }} />
-              );
-            })}
-
-            {/* LAYER 2 — zone di terreno (tilebloczone: mare/palude/deserto/pianura/fiume/bosco/montagne) */}
-            {showZones && zoneLayer && (
-              <img src={zoneLayer} alt="Layer zone" draggable={false} className="zone-layer pointer-events-none absolute inset-0 h-full w-full" />
-            )}
-
-            {/* pin destinazione + avatar */}
-            {target && <span className="map-pin" style={{ left: `${(target.x / MAP_W) * 100}%`, top: `${(target.y / MAP_H) * 100}%` }} />}
-            <div
-              className={`map-avatar absolute w-[2.8%] z-10 select-none ${moving ? "map-avatar-walk pointer-events-none" : "pointer-events-auto cursor-pointer"}`}
-              style={{
-                left: `${(avatar.x / MAP_W) * 100}%`,
-                top: `${(avatar.y / MAP_H) * 100}%`,
-                transform: "translate(-50%,-50%)",
-                transitionDuration: moving ? `${stepDuration}ms` : "600ms",
-                transitionTimingFunction: "linear",
-              }}
-              onClick={(e) => {
-                e.stopPropagation();
-                if (moving || overlayOpen || isPaused) return;
-                if (regionId !== null) {
-                  setView("region");
-                } else {
-                  addLog("Ti trovi in mare aperto o fuori dai confini di una regione.", "info");
-                }
-              }}
-              title={regionId !== null ? `Clicca per esplorare ${REGIONS[regionId].name}` : "Il tuo personaggio"}
-            >
-              <img
-                src={asset("sprites/avatarpg.webp")}
-                alt="Il tuo personaggio"
-                draggable={false}
-                className="w-full h-full object-contain filter drop-shadow-[0_4px_8px_rgba(0,0,0,0.85)]"
-              />
-            </div>
-
-            <div className="vignette pointer-events-none absolute inset-0" />
-
-            {/* LAYER 3 — ispettore regioni (verifica sagome) */}
-            {inspect && <RegionInspector current={regionId} onClose={() => setInspect(false)} />}
-
-            {/* legenda zone */}
-            {showZones && !overlayOpen && (
-              <div className="panel absolute bottom-3 left-3 z-10 flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2">
-                {(Object.keys(TERRAIN) as unknown as number[]).map((z) => (
-                  <span key={z} className="flex items-center gap-1.5">
-                    <i className="inline-block h-2.5 w-2.5" style={{ background: TERRAIN_COLORS[z as unknown as number] }} />
-                    <span className="text-[10px] italic text-[var(--color-muted)]">{TERRAIN[z as unknown as number]}</span>
-                  </span>
-                ))}
-              </div>
-            )}
-
-            {/* etichetta bioma sotto il cursore quando zone è attivo */}
-            {showZones && cursor && !overlayOpen && !inspect && (
-              <div className="pointer-events-none absolute z-20 -translate-x-1/2 translate-y-3"
-                style={{ left: `${(cursor.x / MAP_W) * 100}%`, top: `${(cursor.y / MAP_H) * 100}%` }}>
-                <span className="panel px-2.5 py-1 font-display text-xs text-[var(--color-gold-soft)] shadow-xl bg-black/90 border border-[var(--color-gold)]/60">
-                  {terrainAt(cursor.x, cursor.y)}
-                </span>
-              </div>
-            )}
-
-            {/* badge elegante scala cartografica e distanza (in basso a destra) */}
-            {!overlayOpen && !inspect && (
-              <div className="panel pointer-events-none absolute bottom-3 right-3 z-10 p-2.5 bg-black/85 backdrop-blur-sm border border-[var(--color-gold)]/60 shadow-2xl min-w-[155px]">
-                <div className="flex items-center justify-between gap-2 border-b border-[var(--color-border)] pb-1 mb-1.5">
-                  <div className="flex items-center gap-1.5 text-[var(--color-gold)]">
-                    <Compass className="w-3.5 h-3.5 text-[var(--color-gold)] shrink-0" />
-                    <span className="font-display text-[11px] uppercase tracking-wider">
-                      {moving ? "In Cammino" : "Distanza"}
-                    </span>
-                  </div>
-                  <span className="font-num text-xs text-[var(--color-gold-soft)] font-bold">
-                    {distKm !== null ? `${distKm} km` : "—"}
-                  </span>
-                </div>
-
-                {/* mini-scala cartografica */}
-                <div className="flex flex-col gap-1">
-                  <div className="flex items-center justify-between text-[9px] font-num text-[var(--color-muted)] px-0.5">
-                    <span>0</span>
-                    <span className="text-[var(--color-gold-soft)] font-medium">10 km</span>
-                    <span>20 km</span>
-                  </div>
-                  <div className="flex h-1.5 w-full border border-[var(--color-border)] rounded-sm overflow-hidden bg-black/80">
-                    <div className="w-1/2 bg-[var(--color-gold)]/80 border-r border-black" />
-                    <div className="w-1/2 bg-white/35" />
-                  </div>
-                  <span className="text-[9px] text-center italic text-[var(--color-muted)] mt-0.5">
-                    1 cella = 10 km
-                  </span>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
+        <WorldMap
+          stage={stage}
+          avatar={avatar}
+          target={target}
+          moving={moving}
+          stepDuration={stepDuration}
+          regionId={regionId}
+          currentRegionName={region?.name}
+          inspect={inspect}
+          onCloseInspect={() => setInspect(false)}
+          showZones={showZones}
+          overlayOpen={overlayOpen}
+          isPaused={isPaused}
+          cursor={cursor}
+          distKm={distKm}
+          onMapClick={(e) => {
+            if (overlayOpen || isPaused) return;
+            travel(toMap(e));
+          }}
+          onMouseMove={(e) => {
+            if (overlayOpen || inspect) return;
+            const p = toMap(e);
+            setCursor(p);
+            setHoverId(regionAt(p.x, p.y));
+          }}
+          onMouseLeave={() => {
+            if (inspect) return;
+            setCursor(null);
+            setHoverId(null);
+          }}
+          onAvatarClick={() => {
+            if (regionId !== null) {
+              setView("region");
+            } else {
+              addLog("Ti trovi in mare aperto o fuori dai confini di una regione.", "info");
+            }
+          }}
+        />
 
         {/* ---------- scene sovrapposte (72%) ---------- */}
         {overlayOpen && (
@@ -598,25 +489,17 @@ export default function Game() {
       </div>
 
       {/* ---------- riquadro info in basso ---------- */}
-      <footer className="flex shrink-0 items-center border-t border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2 overflow-x-auto text-xs">
-        <Field k="X" v={Math.round(info.x)} mono width="w-[72px]" />
-        <span className="mx-1 h-3.5 w-px bg-[var(--color-border)] opacity-60 shrink-0" />
-        <Field k="Y" v={Math.round(info.y)} mono width="w-[72px]" />
-        <span className="mx-1 h-3.5 w-px bg-[var(--color-border)] opacity-60 shrink-0" />
-        <Field k="Regione" v={(cursor ? hoverRegion?.name : region?.name) ?? "Mare aperto"} width="w-[285px]" truncate />
-        <span className="mx-1 h-3.5 w-px bg-[var(--color-border)] opacity-60 shrink-0" />
-        <Field k="Bioma" v={(cursor ? hoverRegion?.biome : region?.biome) ?? "—"} width="w-[130px]" />
-        <span className="mx-1 h-3.5 w-px bg-[var(--color-border)] opacity-60 shrink-0" />
-        <Field k="Tipo" v={terrainAt(info.x, info.y)} width="w-[175px]" />
-        <span className="mx-1 h-3.5 w-px bg-[var(--color-border)] opacity-60 shrink-0" />
-        <Field k="Turno" v={turno} mono width="w-[90px]" />
-        <div className="ml-auto flex items-center gap-2 pl-4 shrink-0">
-          <span className="stat-key">Vita</span>
-          <div className="bar bar-hp w-28"><i style={{ width: `${(pg.pv / pg.pvmax) * 100}%` }} /></div>
-          <span className="stat-val font-num">{pg.pv}/{pg.pvmax}</span>
-          <span className="ml-3 stat-key">Liv.</span><span className="stat-val font-num">{pg.livello}</span>
-        </div>
-      </footer>
+      <BottomBar
+        x={info.x}
+        y={info.y}
+        regionName={(cursor ? hoverRegion?.name : region?.name) ?? "Mare aperto"}
+        biomeName={(cursor ? hoverRegion?.biome : region?.biome) ?? "—"}
+        terrainType={terrainAt(info.x, info.y)}
+        turno={turno}
+        pv={pg.pv}
+        pvmax={pg.pvmax}
+        livello={pg.livello}
+      />
 
       {/* Pop-up Professione Mancante */}
       {missingProfPopup && (
@@ -646,34 +529,6 @@ export default function Game() {
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-function Field({
-  k,
-  v,
-  mono,
-  width,
-  truncate,
-}: {
-  k: string;
-  v: string | number;
-  mono?: boolean;
-  width?: string;
-  truncate?: boolean;
-}) {
-  return (
-    <div className={`flex items-baseline gap-1.5 shrink-0 ${width ?? ""}`}>
-      <span className="stat-key shrink-0">{k}:</span>
-      <span
-        className={`tabular-nums ${mono ? "stat-val font-num" : "text-sm text-[var(--color-ink)]"} ${
-          truncate ? "truncate" : ""
-        }`}
-        title={typeof v === "string" ? v : undefined}
-      >
-        {v}
-      </span>
     </div>
   );
 }
