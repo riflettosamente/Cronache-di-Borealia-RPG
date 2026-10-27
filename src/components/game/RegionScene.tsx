@@ -2,6 +2,7 @@ import { useState } from "react";
 import { GATHERABLES, type RegionData, type Spawn } from "@/game/engine";
 import { asset } from "@/game/assets";
 import { Compass, Flame, ArrowLeft, Eye } from "lucide-react";
+import { GatherableBadge } from "./GatherableIcon";
 
 export interface GatherResult {
   x: number;
@@ -116,14 +117,10 @@ export default function RegionScene({
               {/* Alone pulsante di interazione */}
               <div className="pickup-halo bg-[var(--color-gold)]/20 animate-pulse border border-[var(--color-gold)]/30" />
 
-              <img
-                src={asset(g.sprite)}
-                alt={g.id}
-                className="w-12 h-12 sm:w-14 sm:h-14 object-contain drop-shadow-[0_4px_10px_rgba(0,0,0,.9)]"
-                onError={(e) => {
-                  // Fallback etichetta se sprite non ancora presente
-                  (e.currentTarget as HTMLElement).style.display = "none";
-                }}
+              <GatherableBadge
+                id={g.id}
+                size="lg"
+                className="group-hover:scale-110 drop-shadow-[0_4px_14px_rgba(0,0,0,0.95)]"
               />
 
               {/* Tooltip hovering con azione e nome */}

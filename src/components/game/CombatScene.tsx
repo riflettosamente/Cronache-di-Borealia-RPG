@@ -9,6 +9,7 @@ import {
 } from "@/game/engine";
 import { asset } from "@/game/assets";
 import { Swords, Footprints, Shield, Heart } from "lucide-react";
+import { MonsterCard } from "./MonsterCard";
 
 interface CombatSceneProps {
   enemy: Enemy;
@@ -206,60 +207,19 @@ export default function CombatScene({
 
       {/* Area Centrale: La Carta Mostro e i Punti Immagine */}
       <div className="relative flex-1 min-h-0 flex items-center justify-center p-2">
-        <div
-          className={`enemy-card relative w-[240px] sm:w-[270px] aspect-[400/569] rounded-lg overflow-hidden bg-black/90 ${
-            shakeCard ? "card-shake" : ""
-          }`}
-        >
-          {/* Immagine della Carta Mostro */}
-          <img
-            src={asset(enemy.img)}
-            alt={enemy.name}
-            className="w-full h-full object-cover"
-            onError={(e) => {
-              (e.currentTarget as HTMLElement).style.display = "none";
-            }}
-          />
-
-          {/* Badge Vita Nemico in Alto a Destra */}
-          <div className="absolute top-[8%] right-[8%] z-10 flex items-center gap-1 bg-black/80 border border-red-700/80 rounded px-2 py-0.5 shadow-lg">
-            <Heart className="w-3 h-3 text-red-500 fill-red-500" />
-            <span className="font-num text-xs font-bold text-white">
-              {enemyPv}/{enemy.pvmax}
-            </span>
-          </div>
-
-          {/* Nome e Statistiche in Basso sulla Carta */}
-          <div className="absolute inset-x-0 bottom-0 p-2 bg-gradient-to-t from-black via-black/80 to-transparent flex flex-col gap-1">
-            <h3 className="font-display text-sm text-[var(--color-gold)] text-center truncate drop-shadow">
-              {enemy.name}
-            </h3>
-
-            {/* Chips Attributi Chiave (ATT, PAR, IMP, PRO, XP) */}
-            <div className="grid grid-cols-5 gap-1 text-center">
-              <div className="chip">
-                <span>ATT</span>
-                <b>+{enemy.att}</b>
-              </div>
-              <div className="chip">
-                <span>PAR</span>
-                <b>+{enemy.par}</b>
-              </div>
-              <div className="chip">
-                <span>IMP</span>
-                <b>{enemy.imp}</b>
-              </div>
-              <div className="chip">
-                <span>PRO</span>
-                <b>{enemy.pro}</b>
-              </div>
-              <div className="chip">
-                <span>XP</span>
-                <b>+{enemy.xpReward}</b>
-              </div>
-            </div>
-          </div>
-        </div>
+        <MonsterCard
+          name={enemy.name}
+          tier={enemy.tier}
+          pv={enemyPv}
+          pvmax={enemy.pvmax}
+          att={enemy.att}
+          par={enemy.par}
+          imp={enemy.imp}
+          pro={enemy.pro}
+          xp={enemy.xpReward}
+          frame={enemy.frame}
+          shake={shakeCard}
+        />
 
         {/* Dado D20 / Animazione Tiro */}
         {diceRoll !== null && (

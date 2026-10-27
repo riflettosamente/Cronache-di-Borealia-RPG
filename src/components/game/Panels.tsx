@@ -12,8 +12,12 @@ import {
   type Professione,
 } from "@/game/engine";
 import { asset } from "@/game/assets";
+import { GatherableBadge } from "./GatherableIcon";
+import { MonsterCard } from "./MonsterCard";
 
 export type PanelId = "pg" | "borsa" | "diario" | "atlante" | "bestiario" | "zona";
+
+export const NAV_PANELS: PanelId[] = ["pg", "borsa", "diario", "atlante", "bestiario"];
 
 export const PANEL_LABEL: Record<PanelId, string> = {
   pg: "Personaggio",
@@ -24,13 +28,12 @@ export const PANEL_LABEL: Record<PanelId, string> = {
   zona: "Risorse della Cella / Zona",
 };
 
-export const PANEL_KEY: Record<PanelId, string> = {
+export const PANEL_KEY: Record<string, string> = {
   pg: "C",
   borsa: "I",
   diario: "L",
   atlante: "M",
   bestiario: "B",
-  zona: "Z",
 };
 
 export interface LogEntry {
@@ -375,63 +378,20 @@ export function BestiaryPanel() {
       {/* Riquadro Dettaglio Mostro con Carta e Punteggi */}
       {m && (
         <div className="panel-inset p-3.5 flex flex-col md:flex-row items-center justify-center gap-4 bg-black/60">
-          {/* Carta Mostro con Statistiche Sovrapposte */}
-          <div className="relative w-52 aspect-[400/569] overflow-hidden rounded-lg border border-[var(--color-border)] shadow-2xl bg-black/90 shrink-0">
-            <img
-              src={asset(m.img)}
-              alt={m.name}
-              className="w-full h-full object-cover"
-              onError={(e) => {
-                (e.currentTarget as HTMLElement).style.display = "none";
-              }}
+          {/* Carta Mostro con Statistiche (senza immagine, layout puro) */}
+          <div className="shrink-0 flex items-center justify-center">
+            <MonsterCard
+              name={m.name}
+              tier={m.baseTier}
+              pv={m.pv}
+              att={m.att}
+              par={m.par}
+              imp={m.imp}
+              pro={m.pro}
+              xp={m.xp}
+              frame={m.frame}
+              className="w-56"
             />
-
-            {/* Punti Vita sovrapposti nel Cuore in Alto a Destra */}
-            <div
-              className="absolute pointer-events-none transform -translate-x-1/2 -translate-y-1/2 flex items-center justify-center"
-              style={{ left: "85.5%", top: "10.5%" }}
-            >
-              <span className="font-num font-extrabold text-[13px] text-white drop-shadow-[0_2px_4px_rgba(0,0,0,1)]">
-                {m.pv}
-              </span>
-            </div>
-
-            {/* 5 Riquadri Statistiche in Basso sulla Carta (ATT, PAR, IMP, PRO, XP) */}
-            <div
-              className="absolute pointer-events-none transform -translate-x-1/2 -translate-y-1/2 font-num font-bold text-[11px] text-[#222] flex items-center justify-center"
-              style={{ left: "19%", top: "91.2%" }}
-              title="Attacco (PATT)"
-            >
-              {m.att}
-            </div>
-            <div
-              className="absolute pointer-events-none transform -translate-x-1/2 -translate-y-1/2 font-num font-bold text-[11px] text-[#222] flex items-center justify-center"
-              style={{ left: "34.5%", top: "91.2%" }}
-              title="Parata (PPAR)"
-            >
-              {m.par}
-            </div>
-            <div
-              className="absolute pointer-events-none transform -translate-x-1/2 -translate-y-1/2 font-num font-bold text-[10px] text-[#222] flex items-center justify-center"
-              style={{ left: "50.2%", top: "91.2%" }}
-              title="Impatto (PImp)"
-            >
-              {m.imp}
-            </div>
-            <div
-              className="absolute pointer-events-none transform -translate-x-1/2 -translate-y-1/2 font-num font-bold text-[11px] text-[#222] flex items-center justify-center"
-              style={{ left: "66%", top: "91.2%" }}
-              title="Protezione (PPro)"
-            >
-              {m.pro}
-            </div>
-            <div
-              className="absolute pointer-events-none transform -translate-x-1/2 -translate-y-1/2 font-num font-bold text-[10px] text-[#222] flex items-center justify-center"
-              style={{ left: "81.5%", top: "91.2%" }}
-              title="Punti Esperienza (XP)"
-            >
-              {m.xp}
-            </div>
           </div>
 
           {/* Scheda Statistiche Dettagliate */}
@@ -654,16 +614,7 @@ export function ZonePanel({ zone }: { zone: SelectedZoneData }) {
                   className="p-2.5 rounded bg-black/50 border border-[var(--color-border)] hover:border-[var(--color-gold)]/60 transition-colors flex items-center justify-between gap-3 shadow-sm"
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="w-10 h-10 rounded bg-black/60 border border-[var(--color-border)]/80 flex items-center justify-center shrink-0 p-1">
-                      <img
-                        src={asset(g.sprite)}
-                        alt={g.id}
-                        className="w-full h-full object-contain drop-shadow"
-                        onError={(e) => {
-                          (e.currentTarget as HTMLElement).style.display = "none";
-                        }}
-                      />
-                    </div>
+                    <GatherableBadge id={g.id} size="md" />
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5">
                         <span className="font-display text-sm font-semibold text-[var(--color-ink)] capitalize truncate">

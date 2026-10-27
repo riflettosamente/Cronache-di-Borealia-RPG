@@ -1,5 +1,5 @@
 import React from "react";
-import { PANEL_LABEL, PANEL_KEY, type PanelId } from "./Panels";
+import { PANEL_LABEL, PANEL_KEY, NAV_PANELS, type PanelId } from "./Panels";
 import { Maximize, Minimize } from "lucide-react";
 
 interface TopNavProps {
@@ -44,12 +44,12 @@ export default function TopNav({
         </span>
       </h1>
       <nav className="flex items-center gap-1.5">
-        {(Object.keys(PANEL_LABEL) as PanelId[]).map((p) => (
+        {NAV_PANELS.map((p) => (
           <button
             key={p}
             onClick={() => onTogglePanel(p)}
             className={`btn btn-sm ${panel === p ? "btn-gold" : ""}`}
-            title={`Tasto ${PANEL_KEY[p]}`}
+            title={`Tasto ${PANEL_KEY[p] ?? ""}`}
           >
             {PANEL_LABEL[p]}
           </button>
