@@ -1,12 +1,44 @@
 import React from "react";
-import { Heart, Shield, Swords, Sparkles, Award } from "lucide-react";
+import { Heart, Sparkles } from "lucide-react";
+import type { IconType } from "react-icons";
 import {
+  GiEagleHead,
+  GiHarpy,
+  GiBandit,
+  GiHornedReptile,
+  GiBoar,
+  GiDwarfFace,
+  GiDevilMask,
+  GiDrakkarDragon,
   GiDragonHead,
-  GiDaemonSkull,
+  GiSpikedDragonHead,
+  GiFairy,
+  GiGhost,
+  GiAnt,
+  GiSparkSpirit,
+  GiDjinn,
+  GiGoblinCamp,
+  GiGriffinSymbol,
+  GiLion,
   GiWolfHead,
+  GiWerewolf,
+  GiMummyHead,
+  GiOgre,
+  GiBearFace,
+  GiBat,
+  GiSwampBat,
+  GiSpiderAlt,
+  GiCondorEmblem,
+  GiLeechingWorm,
+  GiSkeleton,
+  GiScorpion,
+  GiRat,
+  GiTroll,
+  GiWyvern,
+  GiFly,
+  GiShamblingZombie,
+  GiRogue,
   GiBeastEye,
-  GiHydra,
-  GiVampireDracula,
 } from "react-icons/gi";
 
 export interface MonsterCardProps {
@@ -74,18 +106,66 @@ const TIER_THEMES: Record<
   },
 };
 
-/** Restituisce un emblema araldico stilizzato in base al nome o tier */
-function getEmblem(name: string, tier: string) {
-  const n = name.toLowerCase();
-  if (n.includes("drago")) return <GiDragonHead className="w-16 h-16 sm:w-20 sm:h-20 text-amber-400/90" />;
-  if (n.includes("demone") || n.includes("spettro") || n.includes("scheletro"))
-    return <GiDaemonSkull className="w-16 h-16 sm:w-20 sm:h-20 text-rose-400/90" />;
-  if (n.includes("basilisco") || n.includes("arpia") || n.includes("manticora"))
-    return <GiHydra className="w-16 h-16 sm:w-20 sm:h-20 text-sky-400/90" />;
-  if (n.includes("vampiro")) return <GiVampireDracula className="w-16 h-16 sm:w-20 sm:h-20 text-purple-400/90" />;
-  if (tier === "mitico" || tier === "raro")
-    return <GiBeastEye className="w-16 h-16 sm:w-20 sm:h-20 text-amber-400/90" />;
-  return <GiWolfHead className="w-16 h-16 sm:w-20 sm:h-20 text-neutral-300/90" />;
+interface MonsterEmblemInfo {
+  icon: IconType;
+  color: string;
+}
+
+/** Mappa fedele per ciascuno dei 36 mostri originali del gioco */
+const MONSTER_EMBLEMS: Record<string, MonsterEmblemInfo> = {
+  aquila: { icon: GiEagleHead, color: "text-amber-300" },
+  arpia: { icon: GiHarpy, color: "text-violet-300" },
+  bandito: { icon: GiBandit, color: "text-stone-300" },
+  basilisco: { icon: GiHornedReptile, color: "text-emerald-400" },
+  cinghiale: { icon: GiBoar, color: "text-amber-600" },
+  coboldo: { icon: GiDwarfFace, color: "text-orange-400" },
+  demone: { icon: GiDevilMask, color: "text-rose-500" },
+  "drago d'ossa": { icon: GiDrakkarDragon, color: "text-neutral-200" },
+  "drago rosso": { icon: GiDragonHead, color: "text-red-500" },
+  "drago verde": { icon: GiSpikedDragonHead, color: "text-emerald-400" },
+  driade: { icon: GiFairy, color: "text-lime-300" },
+  fantasma: { icon: GiGhost, color: "text-cyan-300" },
+  "formica gigante": { icon: GiAnt, color: "text-amber-500" },
+  "fuoco fatuo": { icon: GiSparkSpirit, color: "text-amber-400" },
+  efreet: { icon: GiDjinn, color: "text-orange-500" },
+  goblin: { icon: GiGoblinCamp, color: "text-emerald-500" },
+  grifone: { icon: GiGriffinSymbol, color: "text-amber-300" },
+  leone: { icon: GiLion, color: "text-amber-400" },
+  lupo: { icon: GiWolfHead, color: "text-slate-300" },
+  "lupo mannaro": { icon: GiWerewolf, color: "text-purple-400" },
+  mummia: { icon: GiMummyHead, color: "text-yellow-600" },
+  orco: { icon: GiOgre, color: "text-green-600" },
+  orso: { icon: GiBearFace, color: "text-amber-700" },
+  "pipistrello gigante": { icon: GiBat, color: "text-slate-400" },
+  "pipistrello vampiro": { icon: GiSwampBat, color: "text-red-400" },
+  "ragno gigante": { icon: GiSpiderAlt, color: "text-purple-400" },
+  roc: { icon: GiCondorEmblem, color: "text-amber-400" },
+  sanguisuga: { icon: GiLeechingWorm, color: "text-rose-400" },
+  scheletro: { icon: GiSkeleton, color: "text-zinc-200" },
+  scorpione: { icon: GiScorpion, color: "text-amber-500" },
+  topo: { icon: GiRat, color: "text-stone-400" },
+  troll: { icon: GiTroll, color: "text-teal-400" },
+  viverna: { icon: GiWyvern, color: "text-sky-400" },
+  "mosca gigante": { icon: GiFly, color: "text-lime-400" },
+  zombie: { icon: GiShamblingZombie, color: "text-teal-300" },
+  ladro: { icon: GiRogue, color: "text-neutral-300" },
+};
+
+/** Restituisce l'emblema SVG corrispondente alla creatura */
+function getEmblem(name: string) {
+  const key = name.toLowerCase().trim();
+  const entry = MONSTER_EMBLEMS[key];
+  if (entry) {
+    const Icon = entry.icon;
+    return (
+      <Icon
+        className={`w-16 h-16 sm:w-20 sm:h-20 ${entry.color} drop-shadow-[0_2px_12px_rgba(0,0,0,0.9)]`}
+      />
+    );
+  }
+  return (
+    <GiBeastEye className="w-16 h-16 sm:w-20 sm:h-20 text-amber-400/90 drop-shadow-[0_2px_12px_rgba(0,0,0,0.9)]" />
+  );
 }
 
 export function MonsterCard({
@@ -136,12 +216,12 @@ export function MonsterCard({
         </span>
       </div>
 
-      {/* Sezione Centrale: Nome e Stemma Araldico */}
+      {/* Sezione Centrale: Nome e Stemma Araldico dedicato */}
       <div className="relative z-10 flex flex-col items-center justify-center my-auto py-2 text-center">
         {/* Emblema con cerchio luminoso */}
-        <div className="relative w-24 h-24 sm:w-28 sm:h-28 rounded-full bg-black/60 border border-white/15 flex items-center justify-center shadow-inner mb-2.5">
+        <div className="relative w-24 h-24 sm:w-28 sm:h-28 rounded-full bg-black/70 border border-white/15 flex items-center justify-center shadow-inner mb-2.5">
           <div className="absolute inset-0 rounded-full bg-radial from-white/10 to-transparent pointer-events-none" />
-          {getEmblem(name, safeTier)}
+          {getEmblem(name)}
         </div>
 
         {/* Nome del Mostro */}
@@ -154,7 +234,7 @@ export function MonsterCard({
       </div>
 
       {/* Sezione Inferiore: Punti Vita e Caratteristiche di Combattimento */}
-      <div className="relative z-10 flex flex-col gap-2.5 bg-black/75 border border-white/10 rounded-lg p-2.5 backdrop-blur-sm">
+      <div className="relative z-10 flex flex-col gap-2.5 bg-black/80 border border-white/10 rounded-lg p-2.5 backdrop-blur-sm">
         {/* Barra Punti Vita */}
         <div>
           <div className="flex items-center justify-between text-xs mb-1">
