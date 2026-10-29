@@ -15,13 +15,17 @@ import {
   PANEL_LABEL, PANEL_KEY, type PanelId, type LogEntry, type SelectedZoneData,
 } from "./Panels";
 import { playGatherSound } from "@/game/audio";
+import { GAME_VERSION } from "@/game/version";
 
 export const GAME_TITLE = "Cronache di Borealia";
-export const GAME_VERSION = "alfa 0.22";
+export { GAME_VERSION };
 export const GAME_SUBTITLE = "Terre Inesplorate";
 
 type View = "menu" | "map" | "region" | "combat" | "dead";
-const SAVE = "rpg-alfa-022";
+const SAVE = "borealia_save_game";
+function getSavedData(): string | null {
+  return localStorage.getItem(SAVE) || localStorage.getItem("rpg-alfa-022");
+}
 let logId = 1;
 
 interface Save {
@@ -92,7 +96,7 @@ export default function Game() {
     return () => ro.disconnect();
   }, [view]);
 
-  useEffect(() => { setHasSave(!!localStorage.getItem(SAVE)); }, []);
+  useEffect(() => { setHasSave(!!getSavedData()); }, []);
   // in pausa il riquadro info torna a mostrare la posizione del personaggio solo se in inspect regioni
   useEffect(() => { if (inspect) { setCursor(null); setHoverId(null); } }, [inspect]);
   useEffect(() => {
@@ -153,13 +157,14 @@ export default function Game() {
   const start = (fresh: boolean) => {
     if (fresh) {
       localStorage.removeItem(SAVE);
+      localStorage.removeItem("rpg-alfa-022");
       setPg(initPG()); setProfessions(initProfessioni());
       setInventory({ Rametti: 3, "Carne cruda": 1 });
       setAvatar({ x: 300, y: 700 }); setRegionId(null); setTurno(0); setLog([]);
       addLog("Inizia la tua avventura nelle terre selvagge.", "good");
     } else {
       try {
-        const s: Save = JSON.parse(localStorage.getItem(SAVE) || "{}");
+        const s: Save = JSON.parse(getSavedData() || "{}");
         if (s.pg) {
           setPg(s.pg);
           const baseProfs = initProfessioni();

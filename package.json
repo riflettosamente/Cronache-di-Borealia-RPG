@@ -1,11 +1,12 @@
 {
   "name": "cronache-di-borealia",
   "private": true,
-  "version": "0.22.0",
+  "version": "0.24.0",
   "type": "module",
   "scripts": {
+    "bump": "node scripts/bump-version.mjs",
     "dev": "vite",
-    "build": "vite build",
+    "build": "node scripts/bump-version.mjs && vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit"
